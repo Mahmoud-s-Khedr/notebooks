@@ -1,0 +1,107 @@
+name: Validate and package
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+
+  package-linux:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set rolling nightly package version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm version "$(node -p \"require('./package.json').version\")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+      - run: npm run package:linux
+      - run: |
+          test -f release/*.AppImage
+          test -f release/*.deb
+          test -f release/*.rpm
+          test "$(dpkg-deb -f release/*.deb Package)" = "research-notebook"
+          rpm -qip release/*.rpm | grep -q '^Name *: research-notebook$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-linux
+          path: release/*
+          if-no-files-found: error
+
+  package-windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set rolling nightly package version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: npm version "$(node -p \"require('./package.json').version\")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+      - run: npm run package:win
+      - shell: pwsh
+        run: |
+          if (-not (Get-ChildItem release -Filter *.exe)) { throw 'Windows packages were not created.' }
+          $packages = Get-ChildItem release -Filter *.exe
+          if ($packages.Count -lt 2) { throw 'Expected NSIS and portable executables.' }
+          foreach ($package in $packages) {
+            if ($package.VersionInfo.ProductName -ne 'Research Notebook') { throw "Unexpected package metadata in $($package.Name)." }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-windows
+          path: release/*
+          if-no-files-found: error
+
+  nightly-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [package-linux, package-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded-packages
+      - name: Create stable nightly asset names
+        run: |
+          mkdir nightly-assets
+          cp downloaded-packages/packages-linux/*.AppImage nightly-assets/Research-Notebook-nightly-x64.AppImage
+          cp downloaded-packages/packages-linux/*.deb nightly-assets/Research-Notebook-nightly-x64.deb
+          cp downloaded-packages/packages-linux/*.rpm nightly-assets/Research-Notebook-nightly-x64.rpm
+          installer=$(find downloaded-packages/packages-windows -iname '*setup*x64.exe' -o -iname '*setup*.exe' | head -n 1)
+          portable=$(find downloaded-packages/packages-windows -iname '*portable*x64.exe' -o -iname '*portable*.exe' | head -n 1)
+          test -n "$installer" && test -n "$portable"
+          cp "$installer" nightly-assets/Research-Notebook-nightly-Setup-x64.exe
+          cp "$portable" nightly-assets/Research-Notebook-nightly-Portable-x64.exe
+      - name: Replace nightly prerelease assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view nightly >/dev/null 2>&1 || gh release create nightly --prerelease --title "Research Notebook nightly" --notes "Rolling unsigned development build. Platform trust warnings are expected."
+          gh release edit nightly --prerelease --title "Research Notebook nightly" --notes "Rolling unsigned development build from commit $GITHUB_SHA (run $GITHUB_RUN_NUMBER). Platform trust warnings are expected."
+          gh release upload nightly nightly-assets/* --clobber

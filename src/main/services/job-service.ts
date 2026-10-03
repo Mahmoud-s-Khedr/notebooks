@@ -1,0 +1,33 @@
+import { randomUUID } from 'node:crypto'
+import { mkdirSync, readdirSync, copyFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type Database from 'better-sqlite3'
+import type { DiagnosticEvent, Job, JobKind, JobStatus } from '../../shared/domain'
+
+type Row = { id: string; kind: JobKind; status: JobStatus; payload_json: string; progress: number; error_message: string | null; result_json: string | null; attempts: number; created_at: string; started_at: string | null; completed_at: string | null }
+const at = () => new Date().toISOString()
+const clean = (value: unknown): string => String(value ?? 'Operation failed').replace(/(?:bearer\s+)?[A-Za-z0-9_-]{20,}/gi, '[redacted]').replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]').slice(0, 300)
+const job = (row: Row): Job => ({ id: row.id, kind: row.kind, status: row.status, progress: row.progress, errorMessage: row.error_message, result: row.result_json ? JSON.parse(row.result_json) as Record<string, unknown> : null, attempts: row.attempts, createdAt: row.created_at, startedAt: row.started_at, completedAt: row.completed_at })
+
+/** Main-process queue. Payloads only contain IDs/options; never user content or paths in diagnostics. */
+export class JobService {
+  private running = 0
+  private readonly cancelled = new Set<string>()
+  private readonly handlers = new Map<JobKind, (payload: Record<string, unknown>, checkpoint: (progress: number) => void, cancelled: () => boolean) => Promise<Record<string, unknown>>>()
+  constructor(private readonly db: Database.Database, private readonly concurrency = 2) {
+    // A process cannot safely resume a half-written job. Queued jobs are safe to resume.
+    db.prepare("UPDATE jobs SET status='failed', error_code='INTERRUPTED', error_message='Interrupted by application restart; retry this job.', completed_at=?, updated_at=? WHERE status='running'").run(at(), at())
+  }
+  resume(): void { this.pump() }
+  register(kind: JobKind, handler: (payload: Record<string, unknown>, checkpoint: (progress: number) => void, cancelled: () => boolean) => Promise<Record<string, unknown>>): void { this.handlers.set(kind, handler) }
+  start(kind: JobKind, payload: Record<string, unknown>): Job { const id = randomUUID(); const time = at(); this.db.prepare('INSERT INTO jobs (id,kind,status,payload_json,created_at,updated_at) VALUES (?,?,\'queued\',?,?,?)').run(id, kind, JSON.stringify(payload), time, time); this.event(kind, 'queued'); this.pump(); return this.get(id) }
+  list(): Job[] { return (this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 100').all() as Row[]).map(job) }
+  get(id: string): Job { const row = this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id) as Row | undefined; if (!row) throw new Error('Job not found.'); return job(row) }
+  cancel(id: string): Job { const current = this.get(id); if (current.status === 'queued') this.db.prepare("UPDATE jobs SET status='cancelled', completed_at=?, updated_at=? WHERE id=?").run(at(), at(), id); else if (current.status === 'running') this.cancelled.add(id); return this.get(id) }
+  retry(id: string): Job { const old = this.get(id); if (!['failed', 'cancelled'].includes(old.status)) throw new Error('Only failed or cancelled jobs can be retried.'); const payload = JSON.parse((this.db.prepare('SELECT payload_json FROM jobs WHERE id=?').get(id) as { payload_json: string }).payload_json) as Record<string, unknown>; return this.start(old.kind, { ...payload, retryOf: id }) }
+  diagnostics(): DiagnosticEvent[] { return this.db.prepare('SELECT category,outcome,code,message,duration_ms,created_at FROM diagnostic_events ORDER BY id DESC LIMIT 200').all().map((r: any) => ({ category: r.category, outcome: r.outcome, code: r.code, message: r.message, durationMs: r.duration_ms, createdAt: r.created_at })) }
+  exportDiagnostics(destination: string): string { const out = join(destination, `research-notebook-diagnostics-${Date.now()}.txt`); writeFileSync(out, this.diagnostics().map((e) => `${e.createdAt}\t${e.category}\t${e.outcome}\t${e.code ?? ''}\t${e.message ?? ''}\t${e.durationMs ?? ''}`).join('\n')); return out }
+  private pump(): void { while (this.running < this.concurrency) { const row = this.db.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").get() as Row | undefined; if (!row) return; this.running++; void this.run(row).finally(() => { this.running--; this.pump() }) } }
+  private async run(row: Row): Promise<void> { const start = Date.now(); this.db.prepare("UPDATE jobs SET status='running',started_at=?,updated_at=?,attempts=attempts+1 WHERE id=?").run(at(), at(), row.id); try { const handler = this.handlers.get(row.kind); if (!handler) throw new Error('Unsupported job type.'); const result = await handler(JSON.parse(row.payload_json), (progress) => { if (!this.cancelled.has(row.id)) this.db.prepare('UPDATE jobs SET progress=?,updated_at=? WHERE id=?').run(Math.max(0, Math.min(99, Math.round(progress))), at(), row.id) }, () => this.cancelled.has(row.id)); if (this.cancelled.has(row.id)) { this.db.prepare("UPDATE jobs SET status='cancelled',completed_at=?,updated_at=? WHERE id=?").run(at(), at(), row.id); this.event(row.kind, 'cancelled', null, null, Date.now() - start) } else { this.db.prepare("UPDATE jobs SET status='completed',progress=100,result_json=?,completed_at=?,updated_at=? WHERE id=?").run(JSON.stringify(result), at(), at(), row.id); this.event(row.kind, 'completed', null, null, Date.now() - start) } } catch (error) { if (this.cancelled.has(row.id)) { this.db.prepare("UPDATE jobs SET status='cancelled',completed_at=?,updated_at=? WHERE id=?").run(at(), at(), row.id); this.event(row.kind, 'cancelled', null, null, Date.now() - start) } else { this.db.prepare("UPDATE jobs SET status='failed',error_code='JOB_FAILED',error_message=?,completed_at=?,updated_at=? WHERE id=?").run(clean(error instanceof Error ? error.message : error), at(), at(), row.id); this.event(row.kind, 'failed', 'JOB_FAILED', error instanceof Error ? error.message : error, Date.now() - start) } } finally { this.cancelled.delete(row.id) } }
+  event(category: string, outcome: string, code: string | null = null, message: unknown = null, duration: number | null = null): void { this.db.prepare('INSERT INTO diagnostic_events (category,outcome,code,message,duration_ms,created_at) VALUES (?,?,?,?,?,?)').run(category, outcome, code, message === null ? null : clean(message), duration, at()); this.db.prepare('DELETE FROM diagnostic_events WHERE id NOT IN (SELECT id FROM diagnostic_events ORDER BY id DESC LIMIT 200)').run() }
+}

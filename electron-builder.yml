@@ -1,0 +1,40 @@
+appId: com.researchnotebook.app
+productName: Research Notebook
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources/whisper.cpp
+    to: whisper.cpp
+    filter:
+      - '**/*'
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+electronVersion: 44.0.0
+npmRebuild: true
+artifactName: Research-Notebook-${version}-${os}-${arch}.${ext}
+linux:
+  category: Office
+  maintainer: Research Notebook Maintainers <maintainers@researchnotebook.app>
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: true
+  perMachine: false
+  artifactName: Research-Notebook-${version}-Setup-${arch}.${ext}
+portable:
+  artifactName: Research-Notebook-${version}-Portable-${arch}.${ext}

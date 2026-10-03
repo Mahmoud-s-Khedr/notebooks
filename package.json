@@ -1,0 +1,46 @@
+{
+  "name": "research-notebook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first structured research notebook.",
+  "homepage": "https://github.com/research-notebook/research-notebook",
+  "author": "Research Notebook Maintainers <maintainers@researchnotebook.app>",
+  "desktopName": "research-notebook",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "verify:sidecars": "node scripts/verify-whisper-sidecars.mjs",
+    "benchmark:scenarios": "node scripts/perf-scenarios.mjs",
+    "package:linux": "npm run build && npm run verify:sidecars && electron-builder --config electron-builder.yml --linux AppImage deb rpm --x64 --publish never",
+    "package:win": "npm run build && npm run verify:sidecars && electron-builder --config electron-builder.yml --win nsis portable --x64 --publish never",
+    "pretest": "npm rebuild better-sqlite3",
+    "test": "vitest run",
+    "posttest": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "better-sqlite3": "^13.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12",
+    "vitest": "^4.0.6"
+  }
+}
