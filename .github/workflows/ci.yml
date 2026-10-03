@@ -25,6 +25,8 @@ jobs:
   package-linux:
     needs: validate
     runs-on: ubuntu-latest
+    env:
+      WHISPER_SIDECAR_PLATFORM: linux
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,6 +34,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Build pinned Whisper sidecar
+        run: |
+          git clone --depth 1 --branch v1.8.3 https://github.com/ggml-org/whisper.cpp.git third_party/whisper.cpp
+          test "$(git -C third_party/whisper.cpp rev-parse HEAD)" = "2eeeba56e9edd762b4b38467bab96c2517163158"
+          cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build -DWHISPER_BUILD_EXAMPLES=ON
+          cmake --build third_party/whisper.cpp/build --target whisper-cli --parallel 2
+          mkdir -p resources/whisper.cpp/linux
+          cp third_party/whisper.cpp/build/bin/whisper-cli resources/whisper.cpp/linux/whisper-cli
+          printf '{\n  "linux/whisper-cli": "%s"\n}\n' "$(sha256sum resources/whisper.cpp/linux/whisper-cli | awk '{print $1}')" > resources/whisper.cpp/checksums.json
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: npm version "$(node -p "require('./package.json').version")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
@@ -51,6 +62,8 @@ jobs:
   package-windows:
     needs: validate
     runs-on: windows-latest
+    env:
+      WHISPER_SIDECAR_PLATFORM: win32
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,6 +71,18 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Build pinned Whisper sidecar
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v1.8.3 https://github.com/ggml-org/whisper.cpp.git third_party/whisper.cpp
+          if ((git -C third_party/whisper.cpp rev-parse HEAD) -ne '2eeeba56e9edd762b4b38467bab96c2517163158') { throw 'Unexpected whisper.cpp source revision.' }
+          cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build -DWHISPER_BUILD_EXAMPLES=ON
+          cmake --build third_party/whisper.cpp/build --config Release --target whisper-cli --parallel 2
+          New-Item -ItemType Directory -Force -Path resources/whisper.cpp/win32 | Out-Null
+          $binary = Get-ChildItem third_party/whisper.cpp/build -Recurse -Filter whisper-cli.exe | Select-Object -First 1
+          if (-not $binary) { throw 'whisper-cli.exe was not built.' }
+          Copy-Item $binary.FullName resources/whisper.cpp/win32/whisper-cli.exe
+          @{ 'win32/whisper-cli.exe' = (Get-FileHash resources/whisper.cpp/win32/whisper-cli.exe -Algorithm SHA256).Hash.ToLower() } | ConvertTo-Json | Set-Content resources/whisper.cpp/checksums.json
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
