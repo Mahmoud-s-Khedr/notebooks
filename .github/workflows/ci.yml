@@ -34,7 +34,7 @@ jobs:
       - run: npm ci
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: npm version "$(node -p \"require('./package.json').version\")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+        run: npm version "$(node -p "require('./package.json').version")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - run: npm run package:linux
       - run: |
           test -f release/*.AppImage
@@ -61,7 +61,7 @@ jobs:
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
-        run: npm version "$(node -p \"require('./package.json').version\")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+        run: npm version "$(node -p "require('./package.json').version")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - run: npm run package:win
       - shell: pwsh
         run: |
