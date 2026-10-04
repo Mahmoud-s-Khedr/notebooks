@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog } from 'electron'
 import { join } from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { is } from '@electron-toolkit/utils'
 import { NotebookDatabase } from './database/database'
 import { registerNotebookIpc } from './ipc/register-notebook-ipc'
 import { NotebookService } from './services/notebook-service'
 import { ErrorLogService, appendFallbackError } from './services/error-log-service'
+import { resolveLibraryBootstrap } from './library-bootstrap'
 
 let mainWindow: BrowserWindow | undefined
 let database: NotebookDatabase | undefined
@@ -76,20 +77,9 @@ app
     // This bootstrap pointer deliberately stays at Electron's default user-data path.
     // It is the only state not moved with a library and lets startup validate a move.
     const bootstrapPath = join(defaultDataDirectory, 'library-bootstrap.json')
-    let dataDirectory = defaultDataDirectory
-    let previousRoot: string | null = null
-    try {
-      const pointer = JSON.parse(readFileSync(bootstrapPath, 'utf8')) as {
-        activeRoot?: unknown
-        previousRoot?: unknown
-      }
-      if (typeof pointer.activeRoot === 'string' && existsSync(join(pointer.activeRoot, 'database.sqlite'))) {
-        dataDirectory = pointer.activeRoot
-        previousRoot = typeof pointer.previousRoot === 'string' ? pointer.previousRoot : null
-      }
-    } catch {
-      /* First launch or an interrupted move: keep using the existing library. */
-    }
+    const bootstrap = resolveLibraryBootstrap(defaultDataDirectory, bootstrapPath)
+    const dataDirectory = bootstrap.activeRoot
+    const previousRoot = bootstrap.previousRoot
     database = new NotebookDatabase(join(dataDirectory, 'database.sqlite'))
     errors = new ErrorLogService(
       database.connection,

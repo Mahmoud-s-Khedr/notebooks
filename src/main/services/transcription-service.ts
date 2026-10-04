@@ -178,7 +178,10 @@ type RunRow = {
 const time = () => new Date().toISOString()
 const safeError = (error: unknown): string => {
   const value = error instanceof Error ? error.message : 'Transcription failed.'
-  return value.replace(/(?:sk-[A-Za-z0-9_-]+|Bearer\s+\S+)/gi, '[redacted]').slice(0, 500)
+  return value
+    .replace(/(?:sk-[A-Za-z0-9_-]+|Bearer\s+\S+|(?:api[_-]?key|token|authorization)\s*[=:]\s*\S+)/gi, '[redacted]')
+    .replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]')
+    .slice(0, 500)
 }
 
 export class OpenRouterProvider implements TranscriptionProvider {
@@ -272,6 +275,10 @@ export class WhisperCppProvider implements TranscriptionProvider {
         error instanceof Error
           ? error.message
               .replace(/[\r\n]+/g, ' ')
+              .replace(
+                /(?:sk-[A-Za-z0-9_-]+|Bearer\s+\S+|(?:api[_-]?key|token|authorization)\s*[=:]\s*\S+)/gi,
+                '[redacted]'
+              )
               .replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]')
               .slice(0, 350)
           : ''

@@ -1,12 +1,13 @@
 import type Database from 'better-sqlite3'
 
-interface Migration {
+export interface Migration {
   version: number
   name: string
   sql: string
 }
 
-const migrations: Migration[] = [
+/** Ordered, immutable migration catalogue. Exported for disk-upgrade integration tests. */
+export const migrations: readonly Migration[] = [
   {
     version: 1,
     name: 'foundational_research_notebook_schema',
@@ -290,7 +291,23 @@ const migrations: Migration[] = [
   }
 ]
 
-export function runMigrations(database: Database.Database): void {
+export function applyMigration(database: Database.Database, migration: Migration): void {
+  database.transaction(() => {
+    database.exec(migration.sql)
+    database
+      .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+      .run(migration.version, migration.name, new Date().toISOString())
+  })()
+}
+
+/**
+ * Bring a connection up to a particular known schema version.  Production uses
+ * the latest version; the optional target keeps historical upgrades testable
+ * without maintaining copied SQL fixtures.
+ */
+export function runMigrations(database: Database.Database, targetVersion = migrations.at(-1)?.version ?? 0): void {
+  if (!Number.isInteger(targetVersion) || targetVersion < 0 || targetVersion > (migrations.at(-1)?.version ?? 0))
+    throw new Error('Unknown schema migration target.')
   database.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -307,13 +324,9 @@ export function runMigrations(database: Database.Database): void {
   )
 
   for (const migration of migrations) {
+    if (migration.version > targetVersion) break
     if (applied.has(migration.version)) continue
 
-    database.transaction(() => {
-      database.exec(migration.sql)
-      database
-        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
-        .run(migration.version, migration.name, new Date().toISOString())
-    })()
+    applyMigration(database, migration)
   }
 }

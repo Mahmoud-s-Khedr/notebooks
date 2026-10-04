@@ -116,6 +116,7 @@ export class ExportService {
     const rootName = `${safe(String(data.notebook.title))}-${stamp()}`
     const staging = join(destination, `.${rootName}-${id}.tmp`)
     const final = join(destination, rootName)
+    let published = false
     mkdirSync(staging, { recursive: true })
     try {
       const assetsDirectory = join(staging, 'assets')
@@ -157,6 +158,7 @@ export class ExportService {
         )
       )
       renameSync(staging, final)
+      published = true
       this.db.transaction(() => {
         this.db
           .prepare(
@@ -178,6 +180,9 @@ export class ExportService {
       return { id, directory: final, format, manifestPath: join(final, 'manifest.json') }
     } catch (error) {
       rmSync(staging, { recursive: true, force: true })
+      // A database failure after publication must not leave an untracked
+      // export that looks complete to a user or a later recovery process.
+      if (published) rmSync(final, { recursive: true, force: true })
       throw error
     }
   }

@@ -1433,6 +1433,8 @@ export class NotebookService {
     if (target.startsWith(`${this.libraryRoot}/`) || this.libraryRoot.startsWith(`${target}/`))
       throw new Error('Choose a location outside the current library.')
     this.migration = { state: 'copying', destination: target, error: null }
+    let published = false
+    let pointerTemporary: string | null = null
     try {
       mkdirSync(staging, { recursive: true })
       progress(5)
@@ -1472,8 +1474,9 @@ export class NotebookService {
       progress(90)
       if (cancelled()) throw new Error('Cancelled')
       renameSync(staging, target)
+      published = true
       if (!this.bootstrapPath) throw new Error('This installation cannot activate a relocated library.')
-      const pointerTemporary = `${this.bootstrapPath}.${randomUUID()}.tmp`
+      pointerTemporary = `${this.bootstrapPath}.${randomUUID()}.tmp`
       writeFileSync(pointerTemporary, JSON.stringify({ activeRoot: target, previousRoot: this.libraryRoot }), {
         mode: 0o600
       })
@@ -1483,6 +1486,10 @@ export class NotebookService {
       return { destination: target, restartRequired: true }
     } catch (error) {
       rmSync(staging, { recursive: true, force: true })
+      if (pointerTemporary) rmSync(pointerTemporary, { force: true })
+      // Do not leave a fully copied but inactive library behind if pointer
+      // publication fails after the staging directory was promoted.
+      if (published) rmSync(target, { recursive: true, force: true })
       this.migration = {
         state: 'failed',
         destination: target,
