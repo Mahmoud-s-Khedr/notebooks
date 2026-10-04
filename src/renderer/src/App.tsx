@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import React, { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import {
   BookOpen,
   ChevronDown,

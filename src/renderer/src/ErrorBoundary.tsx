@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import React, { Component, type ErrorInfo, type ReactNode } from 'react'
 
 type Props = { children: ReactNode }
 type State = { failed: boolean }

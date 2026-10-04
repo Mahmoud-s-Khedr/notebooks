@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import React, { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import { Copy, FileText, GripVertical, Link2, MoreHorizontal, Plus, Trash2, Type, Volume2, X } from 'lucide-react'
 import {
   textBlockTypes,
