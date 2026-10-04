@@ -53,10 +53,23 @@ jobs:
           test -f release/*.rpm
           test "$(dpkg-deb -f release/*.deb Package)" = "research-notebook"
           rpm -qip release/*.rpm | grep -q '^Name *: research-notebook$'
-      - uses: actions/upload-artifact@v4
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
         with:
-          name: packages-linux
-          path: release/*
+          name: research-notebook-linux-appimage
+          path: release/*.AppImage
+          if-no-files-found: error
+      - name: Upload Linux Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-notebook-linux-deb
+          path: release/*.deb
+          if-no-files-found: error
+      - name: Upload Linux RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-notebook-linux-rpm
+          path: release/*.rpm
           if-no-files-found: error
 
   package-windows:
@@ -96,8 +109,15 @@ jobs:
           foreach ($package in $packages) {
             if ($package.VersionInfo.ProductName -ne 'Research Notebook') { throw "Unexpected package metadata in $($package.Name)." }
           }
-      - uses: actions/upload-artifact@v4
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
         with:
-          name: packages-windows
-          path: release/*
+          name: research-notebook-windows-installer
+          path: release/*-Setup-*.exe
+          if-no-files-found: error
+      - name: Upload Windows portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-notebook-windows-portable
+          path: release/*-Portable-*.exe
           if-no-files-found: error
