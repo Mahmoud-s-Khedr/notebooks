@@ -74,36 +74,54 @@ function contextIsBounded(value: unknown, depth = 0): boolean {
   )
 }
 
-function registerIpc<Schema extends z.ZodType>(
-  errors: ErrorLogService,
+export type NotebookIpcDialog = {
+  selection: 'file' | 'directory'
+  cancellation: 'return-null' | 'throw'
+}
+
+export type NotebookIpcEndpoint = {
+  channel: string
+  schema: z.ZodType
+  dialog?: NotebookIpcDialog
+  handler: (input: unknown) => unknown
+}
+
+function endpoint<Schema extends z.ZodType>(
   channel: string,
   schema: Schema,
-  handler: (input: z.output<Schema>) => unknown
-): void {
-  ipcMain.handle(channel, async (_event, input: unknown) => {
+  handler: (input: z.output<Schema>) => unknown,
+  dialogMetadata?: NotebookIpcDialog
+): NotebookIpcEndpoint {
+  return { channel, schema, dialog: dialogMetadata, handler: handler as (input: unknown) => unknown }
+}
+
+function registerIpc(errors: ErrorLogService, endpoint: NotebookIpcEndpoint): void {
+  ipcMain.handle(endpoint.channel, async (_event, input: unknown) => {
     const ipcId = randomUUID()
     try {
-      return await handler(schema.parse(input))
+      return await endpoint.handler(endpoint.schema.parse(input))
     } catch (error) {
       errors.record(error, {
         process: 'main',
         layer: 'ipc',
-        category: channel,
+        category: endpoint.channel,
         code: error instanceof z.ZodError ? 'IPC_VALIDATION_FAILED' : 'IPC_HANDLER_FAILED',
         ipcId,
-        context: { channel }
+        context: { channel: endpoint.channel }
       })
       throw error
     }
   })
 }
 
-export function registerNotebookIpc(service: NotebookService, errors: ErrorLogService): void {
+export function notebookIpcEndpoints(service: NotebookService): readonly NotebookIpcEndpoint[] {
+  const endpoints: NotebookIpcEndpoint[] = []
   const register = <Schema extends z.ZodType>(
     channel: string,
     schema: Schema,
-    handler: (input: z.output<Schema>) => unknown
-  ) => registerIpc(errors, channel, schema, handler)
+    handler: (input: z.output<Schema>) => unknown,
+    dialogMetadata?: NotebookIpcDialog
+  ) => endpoints.push(endpoint(channel, schema, handler, dialogMetadata))
   register('notebooks:list', z.undefined(), () => service.listNotebooks())
   register('notebooks:create', z.object({ title: titleSchema }).strict(), (input) =>
     service.createNotebook(input.title)
@@ -173,12 +191,17 @@ export function registerNotebookIpc(service: NotebookService, errors: ErrorLogSe
   register('trash:empty', z.undefined(), () => service.emptyTrash())
   register('search', z.object({ query: searchSchema }).strict(), (input) => service.search(input.query))
 
-  register('assets:import', z.object({ notebookId: idSchema, kind: assetKindSchema }).strict(), async (input) => {
-    const picked = await dialog.showOpenDialog({ properties: ['openFile'] })
-    return picked.canceled || !picked.filePaths[0]
-      ? null
-      : service.importAsset(input.notebookId, input.kind, picked.filePaths[0])
-  })
+  register(
+    'assets:import',
+    z.object({ notebookId: idSchema, kind: assetKindSchema }).strict(),
+    async (input) => {
+      const picked = await dialog.showOpenDialog({ properties: ['openFile'] })
+      return picked.canceled || !picked.filePaths[0]
+        ? null
+        : service.importAsset(input.notebookId, input.kind, picked.filePaths[0])
+    },
+    { selection: 'file', cancellation: 'return-null' }
+  )
   register('assets:list', z.object({ notebookId: idSchema }).strict(), (input) => service.listAssets(input.notebookId))
   register('assets:data-url', z.object({ assetId: idSchema }).strict(), (input) => service.assetDataUrl(input.assetId))
   register(
@@ -276,13 +299,18 @@ export function registerNotebookIpc(service: NotebookService, errors: ErrorLogSe
   )
   register('settings:storage', z.undefined(), () => service.storageSummary())
   register('settings:migration:status', z.undefined(), () => service.migrationStatus())
-  register('settings:migration:start', z.undefined(), async () => {
-    const picked = await dialog.showOpenDialog({
-      properties: ['openDirectory', 'createDirectory'],
-      title: 'Choose a parent folder for the moved library'
-    })
-    return picked.canceled || !picked.filePaths[0] ? null : service.startLibraryMove(picked.filePaths[0])
-  })
+  register(
+    'settings:migration:start',
+    z.undefined(),
+    async () => {
+      const picked = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Choose a parent folder for the moved library'
+      })
+      return picked.canceled || !picked.filePaths[0] ? null : service.startLibraryMove(picked.filePaths[0])
+    },
+    { selection: 'directory', cancellation: 'return-null' }
+  )
   register('settings:migration:remove-old', z.undefined(), () => service.removeOldLibrary())
   register(
     'exports:start',
@@ -294,19 +322,25 @@ export function registerNotebookIpc(service: NotebookService, errors: ErrorLogSe
       })
       if (picked.canceled || !picked.filePaths[0]) throw new Error('Export was cancelled.')
       return service.startExport(input.scope, input.format, picked.filePaths[0])
-    }
+    },
+    { selection: 'directory', cancellation: 'throw' }
   )
   register('jobs:list', z.undefined(), () => service.listJobs())
   register('jobs:cancel', z.object({ jobId: idSchema }).strict(), (input) => service.cancelJob(input.jobId))
   register('jobs:retry', z.object({ jobId: idSchema }).strict(), (input) => service.retryJob(input.jobId))
-  register('backups:start', z.undefined(), async () => {
-    const picked = await dialog.showOpenDialog({
-      properties: ['openDirectory', 'createDirectory'],
-      title: 'Choose backup folder'
-    })
-    if (picked.canceled || !picked.filePaths[0]) throw new Error('Backup was cancelled.')
-    return service.startBackup(picked.filePaths[0])
-  })
+  register(
+    'backups:start',
+    z.undefined(),
+    async () => {
+      const picked = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Choose backup folder'
+      })
+      if (picked.canceled || !picked.filePaths[0]) throw new Error('Backup was cancelled.')
+      return service.startBackup(picked.filePaths[0])
+    },
+    { selection: 'directory', cancellation: 'throw' }
+  )
   register('diagnostics:list', z.undefined(), () => service.diagnostics())
   register('diagnostics:list-errors', errorFilterSchema.optional(), (input) => service.listErrors(input))
   register('diagnostics:get-error', z.object({ id: idSchema }).strict(), (input) => service.getError(input.id))
@@ -314,28 +348,43 @@ export function registerNotebookIpc(service: NotebookService, errors: ErrorLogSe
     if (!contextIsBounded(input.context)) throw new Error('Renderer diagnostic context exceeds safe limits.')
     service.reportRendererError(input)
   })
-  register('diagnostics:export', z.undefined(), async () => {
-    const picked = await dialog.showOpenDialog({
-      properties: ['openDirectory', 'createDirectory'],
-      title: 'Choose diagnostics export folder'
-    })
-    return picked.canceled || !picked.filePaths[0] ? null : service.exportDiagnostics(picked.filePaths[0])
-  })
-  register('imports:start', z.undefined(), async () => {
-    const picked = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'Lossless notebook backup', extensions: ['json'] }]
-    })
-    return picked.canceled || !picked.filePaths[0] ? null : service.importLossless(picked.filePaths[0])
-  })
+  register(
+    'diagnostics:export',
+    z.undefined(),
+    async () => {
+      const picked = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Choose diagnostics export folder'
+      })
+      return picked.canceled || !picked.filePaths[0] ? null : service.exportDiagnostics(picked.filePaths[0])
+    },
+    { selection: 'directory', cancellation: 'return-null' }
+  )
+  register(
+    'imports:start',
+    z.undefined(),
+    async () => {
+      const picked = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'Lossless notebook backup', extensions: ['json'] }]
+      })
+      return picked.canceled || !picked.filePaths[0] ? null : service.importLossless(picked.filePaths[0])
+    },
+    { selection: 'file', cancellation: 'return-null' }
+  )
 
-  register('sources:import-pdf', z.object({ notebookId: idSchema }).strict(), async (input) => {
-    const picked = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'PDF documents', extensions: ['pdf'] }]
-    })
-    return picked.canceled || !picked.filePaths[0] ? null : service.importPdf(input.notebookId, picked.filePaths[0])
-  })
+  register(
+    'sources:import-pdf',
+    z.object({ notebookId: idSchema }).strict(),
+    async (input) => {
+      const picked = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'PDF documents', extensions: ['pdf'] }]
+      })
+      return picked.canceled || !picked.filePaths[0] ? null : service.importPdf(input.notebookId, picked.filePaths[0])
+    },
+    { selection: 'file', cancellation: 'return-null' }
+  )
   register('sources:list', z.object({ notebookId: idSchema }).strict(), (input) =>
     service.listSources(input.notebookId)
   )
@@ -384,4 +433,10 @@ export function registerNotebookIpc(service: NotebookService, errors: ErrorLogSe
       .strict(),
     (input) => service.createQaNote(input.pageId, input.sourceDocumentId, input.pdfPage, input.printedPage, input.text)
   )
+
+  return endpoints
+}
+
+export function registerNotebookIpc(service: NotebookService, errors: ErrorLogService): void {
+  for (const endpoint of notebookIpcEndpoints(service)) registerIpc(errors, endpoint)
 }

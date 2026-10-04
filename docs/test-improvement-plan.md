@@ -2,8 +2,11 @@
 
 The existing suite is a solid persistence foundation, but it needs a deliberate
 expansion from selected main-process integration tests into a desktop-app test
-pyramid. The IPC registrar defines 67 endpoints, while the present tests cover
-only a small subset.
+pyramid. The IPC registrar and `ResearchNotebookApi` currently define 67
+endpoints, while the present tests cover only a small subset. A previous Phase
+3 brief called this a 54-channel contract; that count excludes 13 still-public
+APIs, so the 67-entry inventory is the canonical current contract until those
+APIs are intentionally changed.
 
 ## Goals and success criteria
 
@@ -173,4 +176,3 @@ Update CI in this order:
 3. Keep native packaging dependent on successful validation and E2E.
 4. Upload performance reports as non-blocking artifacts, then promote stable
    regressions to required checks.
-
