@@ -33,7 +33,12 @@ const api: ResearchNotebookApi = {
   transcription: {
     create: (input) => ipcRenderer.invoke('transcription:create', input), get: (input) => ipcRenderer.invoke('transcription:get', input), list: (input) => ipcRenderer.invoke('transcription:list', input), retry: (input) => ipcRenderer.invoke('transcription:retry', input)
   },
-  settings: { transcription: () => ipcRenderer.invoke('settings:transcription'), setOpenRouterKey: (input) => ipcRenderer.invoke('settings:openrouter-key', input) },
+  settings: {
+    preferences: () => ipcRenderer.invoke('settings:preferences'), updatePreferences: (input) => ipcRenderer.invoke('settings:preferences:update', input),
+    transcription: () => ipcRenderer.invoke('settings:transcription'), setOpenRouterKey: (input) => ipcRenderer.invoke('settings:openrouter-key', input), removeOpenRouterKey: () => ipcRenderer.invoke('settings:openrouter-key:remove'),
+    models: () => ipcRenderer.invoke('settings:models'), downloadModel: (input) => ipcRenderer.invoke('settings:models:download', input), cancelModelDownload: (input) => ipcRenderer.invoke('settings:models:cancel', input), removeModel: (input) => ipcRenderer.invoke('settings:models:remove', input), setDefaultModel: (input) => ipcRenderer.invoke('settings:models:default', input),
+    storage: () => ipcRenderer.invoke('settings:storage'), moveLibrary: () => ipcRenderer.invoke('settings:migration:start'), migrationStatus: () => ipcRenderer.invoke('settings:migration:status'), removeOldLibrary: () => ipcRenderer.invoke('settings:migration:remove-old')
+  },
   exports: { start: (input) => ipcRenderer.invoke('exports:start', input) },
   jobs: { list: () => ipcRenderer.invoke('jobs:list'), cancel: (input) => ipcRenderer.invoke('jobs:cancel', input), retry: (input) => ipcRenderer.invoke('jobs:retry', input) },
   backups: { start: () => ipcRenderer.invoke('backups:start') },

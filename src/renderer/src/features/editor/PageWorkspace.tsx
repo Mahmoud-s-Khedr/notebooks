@@ -4,6 +4,9 @@ import { textBlockTypes, type Block, type BlockRelation, type PageWorkspace as W
 import { Button, DropdownMenu, IconTip, Popover } from '../../components/ui'
 
 const label = (type: string): string => type.replaceAll('_', ' ')
+const transcriptionLanguages = [
+  ['ar', 'Arabic'], ['bn', 'Bengali'], ['zh', 'Chinese'], ['nl', 'Dutch'], ['en', 'English'], ['fr', 'French'], ['de', 'German'], ['el', 'Greek'], ['hi', 'Hindi'], ['id', 'Indonesian'], ['it', 'Italian'], ['ja', 'Japanese'], ['ko', 'Korean'], ['ms', 'Malay'], ['fa', 'Persian'], ['pl', 'Polish'], ['pt', 'Portuguese'], ['ru', 'Russian'], ['es', 'Spanish'], ['sw', 'Swahili'], ['ta', 'Tamil'], ['th', 'Thai'], ['tr', 'Turkish'], ['uk', 'Ukrainian'], ['ur', 'Urdu'], ['vi', 'Vietnamese']
+] as const
 type Props = { workspace: Workspace; notebookId: string | null; mode: 'write' | 'research'; reloadWorkspace: () => Promise<void>; loadMore: () => Promise<void>; activeNoteId: string | null; setActiveNoteId: (id: string | null) => void; onError: (error: unknown) => void; onChanged: () => Promise<void>; onTrashed: () => Promise<void>; onViewSource: () => void; onUtilities: (kind: 'export' | 'trash') => void }
 
 export function PageWorkspace({ workspace, notebookId, mode, reloadWorkspace, loadMore, activeNoteId, setActiveNoteId, onError, onChanged, onTrashed, onViewSource, onUtilities }: Props): ReactElement {
@@ -77,5 +80,9 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
   const [runs, setRuns] = useState<import('../../../../shared/domain').TranscriptionRun[]>([]); const [provider, setProvider] = useState<'local' | 'openrouter'>('local'); const [language, setLanguage] = useState(''); const [busy, setBusy] = useState(false)
   const load = useCallback(async () => setRuns(await window.researchNotebook.transcription.list({ blockId: block.id })), [block.id]); useEffect(() => { void load().catch(onError) }, [load, onError])
   const active = runs.find((run) => run.id === block.data.activeTranscriptionRunId) ?? runs[0]
-  return <div className="transcription"><div><select aria-label="Transcription provider" value={provider} onChange={(event) => setProvider(event.target.value as typeof provider)}><option value="local">Local Whisper</option><option value="openrouter">OpenRouter</option></select><input aria-label="Language hint" value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language" /><Button variant="secondary" size="sm" disabled={busy} onClick={() => void (async () => { setBusy(true); try { await window.researchNotebook.transcription.create({ blockId: block.id, provider, language: language || undefined }); await load() } catch (error) { onError(error) } finally { setBusy(false) } })()}>Transcribe</Button></div>{active && <small>{active.provider} · {active.status}{active.transcriptText ? ` · ${active.transcriptText}` : ''}</small>}</div>
+  const start = async () => {
+    setBusy(true)
+    try { await window.researchNotebook.transcription.create({ blockId: block.id, provider, language: language || undefined }); await load() } catch (error) { onError(error) } finally { setBusy(false) }
+  }
+  return <div className="transcription"><div><select aria-label="Transcription provider" value={provider} onChange={(event) => setProvider(event.target.value as typeof provider)}><option value="local">Local Whisper</option><option value="openrouter">OpenRouter</option></select><select aria-label="Language hint" value={language} onChange={(event) => setLanguage(event.target.value)}><option value="">Detect language automatically</option>{transcriptionLanguages.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}</select><Button variant="secondary" size="sm" disabled={busy} onClick={() => void start()}>Transcribe</Button></div>{active && <small>{active.provider} · {active.status}{active.transcriptText ? ` · ${active.transcriptText}` : ''}</small>}</div>
 }

@@ -36,11 +36,17 @@ export interface TranscriptionRun {
   id: string; assetId: string; blockId: string; provider: TranscriptionProviderName; model: string; language: string | null; durationMs: number | null
   status: TranscriptionStatus; confidence: number | null; transcriptText: string | null; errorMessage: string | null; startedAt: string | null; completedAt: string | null; createdAt: string; updatedAt: string; segments: TranscriptionSegment[]
 }
+export type ThemePreference = 'light' | 'dark' | 'system'
+export type DensityPreference = 'default' | 'compact'
+export interface AppPreferences { theme: ThemePreference; density: DensityPreference }
+export interface WhisperModel { id: string; displayName: string; sizeBytes: number; installed: boolean; state: 'idle' | 'downloading' | 'ready' | 'failed'; progress: number | null; error: string | null }
 export interface TranscriptionSettings { openRouterConfigured: boolean; localModels: string[]; openRouterModels: string[]; localBinaryAvailable: boolean; localModelAvailable: boolean; selectedLocalModel: { id: string; displayName: string; sizeBytes: number } | null; localDownload: { state: 'idle' | 'downloading' | 'ready' | 'failed'; progress: number | null; error: string | null } }
+export interface StorageSummary { libraryPath: string; databaseBytes: number; assetsBytes: number; modelsBytes: number; oldLibraryPath: string | null; migration: LibraryMigrationStatus }
+export interface LibraryMigrationStatus { state: 'idle' | 'copying' | 'pending-restart' | 'active' | 'failed'; destination: string | null; error: string | null }
 export type ExportFormat = 'markdown' | 'lossless-json' | 'ai-context' | 'pdf'
 export type ExportScope = { type: 'notebook'; notebookId: string } | { type: 'page'; pageId: string } | { type: 'note'; noteId: string }
 export interface ExportResult { id: string; directory: string; format: ExportFormat; manifestPath: string }
-export type JobKind = 'export' | 'pdf' | 'asset-integrity' | 'backup' | 'thumbnail' | 'transcription'
+export type JobKind = 'export' | 'pdf' | 'asset-integrity' | 'backup' | 'thumbnail' | 'transcription' | 'model-download' | 'library-move'
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 export interface Job { id: string; kind: JobKind; status: JobStatus; progress: number; errorMessage: string | null; result: Record<string, unknown> | null; attempts: number; createdAt: string; startedAt: string | null; completedAt: string | null }
 export interface DiagnosticEvent { category: string; outcome: string; code: string | null; message: string | null; durationMs: number | null; createdAt: string }
@@ -84,7 +90,12 @@ export interface ResearchNotebookApi {
     create(input: { blockId: string; provider: TranscriptionProviderName; model?: string; language?: string }): Promise<Job | TranscriptionRun>
     get(input: { runId: string }): Promise<TranscriptionRun>; list(input: { blockId: string }): Promise<TranscriptionRun[]>; retry(input: { runId: string }): Promise<Job | TranscriptionRun>
   }
-  settings: { transcription(): Promise<TranscriptionSettings>; setOpenRouterKey(input: { key: string }): Promise<void> }
+  settings: {
+    preferences(): Promise<AppPreferences>; updatePreferences(input: Partial<AppPreferences>): Promise<AppPreferences>
+    transcription(): Promise<TranscriptionSettings>; setOpenRouterKey(input: { key: string }): Promise<void>; removeOpenRouterKey(): Promise<void>
+    models(): Promise<WhisperModel[]>; downloadModel(input: { modelId: string }): Promise<Job>; cancelModelDownload(input: { modelId: string }): Promise<void>; removeModel(input: { modelId: string }): Promise<void>; setDefaultModel(input: { modelId: string }): Promise<void>
+    storage(): Promise<StorageSummary>; moveLibrary(): Promise<Job | null>; migrationStatus(): Promise<LibraryMigrationStatus>; removeOldLibrary(): Promise<void>
+  }
   exports: { start(input: { scope: ExportScope; format: ExportFormat }): Promise<Job> }
   jobs: { list(): Promise<Job[]>; cancel(input: { jobId: string }): Promise<Job>; retry(input: { jobId: string }): Promise<Job> }
   backups: { start(): Promise<Job> }

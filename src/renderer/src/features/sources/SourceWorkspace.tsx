@@ -43,11 +43,47 @@ export function SourceWorkspace({ notebookId, workspace, activeNoteId, onSaved, 
 }
 
 function PdfCanvas({ url, page, zoom, onPageCount, onText, onRegion, onCaptureRegion, region }: { url: string; page: number; zoom: number; onPageCount: (count: number) => void; onText: (text: string) => void; onRegion: (region: Rectangle | null) => void; onCaptureRegion: (data: string, bounds: Rectangle) => void; region: Rectangle | null }): ReactElement {
-  const canvas = useRef<HTMLCanvasElement>(null); const wrapper = useRef<HTMLDivElement>(null); const doc = useRef<pdfjs.PDFDocumentProxy | null>(null); const [loading, setLoading] = useState(true)
-  useEffect(() => { let active = true; setLoading(true); doc.current = null; void pdfjs.getDocument({ url }).promise.then((pdf) => { if (!active) return; doc.current = pdf; onPageCount(pdf.numPages) }).catch(() => { if (active) onPageCount(0) }).finally(() => active && setLoading(false)); return () => { active = false } }, [url, onPageCount])
-  useEffect(() => { let active = true; const render = async () => { if (!doc.current || !canvas.current) return; const safePage = Math.min(Math.max(page, 1), doc.current.numPages); const pdfPage = await doc.current.getPage(safePage); const viewport = pdfPage.getViewport({ scale: zoom * Math.min(window.devicePixelRatio || 1, 2) }); const target = canvas.current; target.width = Math.ceil(viewport.width); target.height = Math.ceil(viewport.height); target.style.width = `${Math.ceil(viewport.width / Math.min(window.devicePixelRatio || 1, 2))}px`; target.style.height = `${Math.ceil(viewport.height / Math.min(window.devicePixelRatio || 1, 2))}px`; const context = target.getContext('2d'); if (!context) return; await pdfPage.render({ canvas: target, canvasContext: context, viewport }).promise; if (active) { const text = await pdfPage.getTextContent(); onText(text.items.map((item) => 'str' in item ? item.str : '').join(' ')) } }; void render().catch(() => undefined); return () => { active = false } }, [page, zoom, url, onText])
+  const canvas = useRef<HTMLCanvasElement>(null); const wrapper = useRef<HTMLDivElement>(null); const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    const loadingTask = pdfjs.getDocument({ url })
+    setLoading(true); setError(null); setDoc(null); onPageCount(0)
+    void loadingTask.promise.then((pdf) => {
+      if (!active) return
+      // Keeping the loaded document in state is essential: it triggers the
+      // render effect below after the asynchronous open completes.
+      setDoc(pdf); onPageCount(pdf.numPages)
+    }).catch((reason: unknown) => {
+      if (active) { setError(reason instanceof Error ? reason.message : 'The PDF could not be opened.'); onPageCount(0) }
+    }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false; void loadingTask.destroy() }
+  }, [url, onPageCount])
+  useEffect(() => {
+    if (!doc) return
+    let active = true
+    let renderTask: pdfjs.RenderTask | undefined
+    const render = async () => {
+      const safePage = Math.min(Math.max(page, 1), doc.numPages)
+      const pdfPage = await doc.getPage(safePage)
+      if (!active || !canvas.current) return
+      const deviceScale = Math.min(window.devicePixelRatio || 1, 2)
+      const viewport = pdfPage.getViewport({ scale: zoom * deviceScale })
+      const target = canvas.current
+      target.width = Math.ceil(viewport.width); target.height = Math.ceil(viewport.height)
+      target.style.width = `${Math.ceil(viewport.width / deviceScale)}px`; target.style.height = `${Math.ceil(viewport.height / deviceScale)}px`
+      const context = target.getContext('2d'); if (!context) throw new Error('Canvas rendering is unavailable.')
+      renderTask = pdfPage.render({ canvas: target, canvasContext: context, viewport })
+      await renderTask.promise
+      if (active) { const text = await pdfPage.getTextContent(); onText(text.items.map((item) => 'str' in item ? item.str : '').join(' ')) }
+    }
+    void render().catch((reason: unknown) => {
+      // Page changes cancel the preceding render; that is expected rather than an error.
+      if (active && (reason as { name?: string }).name !== 'RenderingCancelledException') setError(reason instanceof Error ? reason.message : 'The PDF page could not be rendered.')
+    })
+    return () => { active = false; renderTask?.cancel() }
+  }, [doc, page, zoom, onText])
   const start = (event: PointerEvent<HTMLDivElement>) => { const rect = event.currentTarget.getBoundingClientRect(); const x = Math.max(0, event.clientX - rect.left); const y = Math.max(0, event.clientY - rect.top); event.currentTarget.setPointerCapture(event.pointerId); onRegion({ x, y, width: 0, height: 0 }) }
   const move = (event: PointerEvent<HTMLDivElement>) => { if (!region) return; const rect = event.currentTarget.getBoundingClientRect(); onRegion({ ...region, width: Math.max(0, Math.min(rect.width - region.x, event.clientX - rect.left - region.x)), height: Math.max(0, Math.min(rect.height - region.y, event.clientY - rect.top - region.y)) }) }
   const finish = () => { if (!region || region.width < 8 || region.height < 8 || !canvas.current) return; const scale = canvas.current.width / canvas.current.getBoundingClientRect().width; const crop = document.createElement('canvas'); crop.width = Math.round(region.width * scale); crop.height = Math.round(region.height * scale); const context = crop.getContext('2d'); if (!context) return; context.drawImage(canvas.current, Math.round(region.x * scale), Math.round(region.y * scale), crop.width, crop.height, 0, 0, crop.width, crop.height); onCaptureRegion(crop.toDataURL('image/png'), { x: Math.round(region.x * scale), y: Math.round(region.y * scale), width: crop.width, height: crop.height }) }
-  return <div className="pdf-scroll"><div className="pdf-stage" ref={wrapper} onPointerDown={start} onPointerMove={move} onPointerUp={finish} aria-label="PDF page. Drag to capture an image region."><canvas ref={canvas} />{region && <div className="pdf-region" style={{ left: region.x, top: region.y, width: region.width, height: region.height }} />}{loading && <div className="pdf-loading">Rendering PDF…</div>}</div><p className="pdf-help"><Maximize2 size={13} /> Drag on the page to capture a region.</p></div>
+  return <div className="pdf-scroll"><div className="pdf-stage" ref={wrapper} onPointerDown={start} onPointerMove={move} onPointerUp={finish} aria-label="PDF page. Drag to capture an image region."><canvas ref={canvas} />{region && <div className="pdf-region" style={{ left: region.x, top: region.y, width: region.width, height: region.height }} />}{loading && <div className="pdf-loading">Rendering PDF…</div>}{error && <div className="pdf-loading">Unable to render PDF: {error}</div>}</div><p className="pdf-help"><Maximize2 size={13} /> Drag on the page to capture a region.</p></div>
 }

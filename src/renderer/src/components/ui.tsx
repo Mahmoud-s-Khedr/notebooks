@@ -7,7 +7,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { X } from 'lucide-react'
 
 const buttonStyles = cva('button', {
-  variants: { variant: { default: 'button-primary', secondary: 'button-secondary', ghost: 'button-ghost', danger: 'button-danger', icon: 'icon-button' }, size: { default: '', sm: 'button-sm', icon: 'icon-button' } },
+  variants: { variant: { default: 'button-primary', primary: 'button-primary', secondary: 'button-secondary', ghost: 'button-ghost', danger: 'button-danger', icon: 'icon-button' }, size: { default: '', sm: 'button-sm', icon: 'icon-button' } },
   defaultVariants: { variant: 'default', size: 'default' }
 })
 

@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import type Database from 'better-sqlite3'
-import type { TranscriptionProviderName, TranscriptionRun, TranscriptionSegment, TranscriptionSettings, TranscriptionStatus } from '../../shared/domain'
+import type { TranscriptionProviderName, TranscriptionRun, TranscriptionSegment, TranscriptionSettings, TranscriptionStatus, WhisperModel } from '../../shared/domain'
 
 export interface NormalizedTranscript { text: string; confidence?: number; segments: Array<{ startMs: number; endMs: number; text: string; confidence?: number }> }
 export interface TranscriptionProvider { readonly name: TranscriptionProviderName; transcribe(input: { audioPath: string; model: string; language?: string; cancelled?: () => boolean; progress?: (value: number) => void }): Promise<NormalizedTranscript> }
@@ -11,32 +11,35 @@ export interface LocalModelStatus { binaryPath: string | null; modelPath: string
 
 /** Downloads are deliberately owned by main process; no renderer path or URL access is exposed. */
 export class WhisperModelManager {
-  static readonly modelId = 'ggml-small.bin'
-  static readonly modelUrl = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
-  // This is the release checksum. Keeping it here makes a changed upstream object fail closed.
-  static readonly sha256 = '1be3a9b2063867d3b4c0fbd0c4f9028cf6288fb9cb5d4e35ac3e6a9e0e7eb8f5'
-  private status: LocalModelStatus['download'] = { state: 'idle', progress: null, error: null }
-  private downloading: Promise<void> | null = null
+  // These are the multilingual ggml release artifacts. The revision is pinned so a
+  // changed upstream branch can never silently replace a model.
+  static readonly catalog = [
+    { id: 'ggml-tiny.bin', displayName: 'Whisper Tiny (multilingual)', sizeBytes: 77_691_713, sha256: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21' },
+    { id: 'ggml-base.bin', displayName: 'Whisper Base (multilingual)', sizeBytes: 147_951_465, sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe' },
+    { id: 'ggml-small.bin', displayName: 'Whisper Small (multilingual)', sizeBytes: 487_601_967, sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b' },
+    { id: 'ggml-medium.bin', displayName: 'Whisper Medium (multilingual)', sizeBytes: 1_533_763_059, sha256: '6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208' },
+    { id: 'ggml-large-v3.bin', displayName: 'Whisper Large-v3 (multilingual)', sizeBytes: 3_095_033_483, sha256: '64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2' }
+  ] as const
+  private readonly status = new Map<string, LocalModelStatus['download']>()
   constructor(private readonly directory: string, private readonly binaryPath: string | null, private readonly fetcher: typeof fetch = fetch) { mkdirSync(directory, { recursive: true }) }
-  path(): string { return join(this.directory, WhisperModelManager.modelId) }
-  getStatus(): LocalModelStatus { const available = existsSync(this.path()); return { binaryPath: this.binaryPath && existsSync(this.binaryPath) ? this.binaryPath : null, modelPath: this.path(), available, download: available ? { state: 'ready', progress: 1, error: null } : this.status } }
-  async ensure(): Promise<string> {
-    if (existsSync(this.path())) return this.path()
-    if (!this.downloading) this.downloading = this.download().finally(() => { this.downloading = null })
-    await this.downloading; return this.path()
-  }
-  private async download(): Promise<void> {
-    this.status = { state: 'downloading', progress: 0, error: null }; const temporary = `${this.path()}.${randomUUID()}.tmp`
+  path(modelId: string): string { this.model(modelId); return join(this.directory, modelId) }
+  getStatus(modelId: string): LocalModelStatus { const available = existsSync(this.path(modelId)); return { binaryPath: this.binaryPath && existsSync(this.binaryPath) ? this.binaryPath : null, modelPath: this.path(modelId), available, download: available ? { state: 'ready', progress: 1, error: null } : this.status.get(modelId) ?? { state: 'idle', progress: null, error: null } } }
+  list(): WhisperModel[] { return WhisperModelManager.catalog.map((model) => ({ ...model, installed: existsSync(this.path(model.id)), ...this.getStatus(model.id).download })) }
+  async download(modelId: string, cancelled: () => boolean = () => false, progress: (value: number) => void = () => {}): Promise<void> {
+    const model = this.model(modelId); if (existsSync(this.path(modelId))) return
+    this.status.set(modelId, { state: 'downloading', progress: 0, error: null }); const temporary = `${this.path(modelId)}.${randomUUID()}.tmp`
     try {
-      const response = await this.fetcher(WhisperModelManager.modelUrl)
+      const response = await this.fetcher(`https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/${model.id}`)
       if (!response.ok || !response.body) throw new Error('The multilingual Whisper model could not be downloaded.')
       const length = Number(response.headers.get('content-length') ?? 0); const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let received = 0
-      for (;;) { const next = await reader.read(); if (next.done) break; chunks.push(next.value); received += next.value.byteLength; this.status = { state: 'downloading', progress: length ? received / length : null, error: null } }
+      for (;;) { if (cancelled()) throw new Error('Cancelled'); const next = await reader.read(); if (next.done) break; chunks.push(next.value); received += next.value.byteLength; const value = length ? received / length : null; this.status.set(modelId, { state: 'downloading', progress: value, error: null }); progress(value === null ? 0 : value * 100) }
       const bytes = Buffer.concat(chunks); const hash = createHash('sha256').update(bytes).digest('hex')
-      if (hash !== WhisperModelManager.sha256) throw new Error('The downloaded Whisper model failed its integrity check.')
-      writeFileSync(temporary, bytes, { mode: 0o600 }); renameSync(temporary, this.path()); this.status = { state: 'ready', progress: 1, error: null }
-    } catch (error) { const message = safeError(error); rmSync(temporary, { force: true }); this.status = { state: 'failed', progress: null, error: message }; throw new Error(message) }
+      if (hash !== model.sha256) throw new Error('The downloaded Whisper model failed its integrity check.')
+      writeFileSync(temporary, bytes, { mode: 0o600 }); if (cancelled()) throw new Error('Cancelled'); renameSync(temporary, this.path(modelId)); this.status.set(modelId, { state: 'ready', progress: 1, error: null }); progress(100)
+    } catch (error) { const message = safeError(error); rmSync(temporary, { force: true }); this.status.set(modelId, { state: message === 'Cancelled' ? 'idle' : 'failed', progress: null, error: message === 'Cancelled' ? null : message }); throw new Error(message) }
   }
+  remove(modelId: string): void { rmSync(this.path(modelId), { force: true }); this.status.set(modelId, { state: 'idle', progress: null, error: null }) }
+  private model(modelId: string) { const model = WhisperModelManager.catalog.find((candidate) => candidate.id === modelId); if (!model) throw new Error('Unknown Whisper model.'); return model }
 }
 
 type RunRow = { id: string; asset_id: string; block_id: string; provider: TranscriptionProviderName; model: string; language: string | null; duration_ms: number | null; status: TranscriptionStatus; confidence: number | null; transcript_text: string | null; error_message: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string }
@@ -130,6 +133,13 @@ export class TranscriptionService {
 export class TranscriptionConfig {
   private readonly path: string
   constructor(directory: string) { mkdirSync(directory, { recursive: true }); this.path = join(directory, 'transcription.json') }
-  getKey(): string | null { try { const key = JSON.parse(readFileSync(this.path, 'utf8')).openRouterKey; return typeof key === 'string' && key ? key : null } catch { return null } }
-  setKey(key: string): void { const temporary = `${this.path}.${randomUUID()}.tmp`; writeFileSync(temporary, JSON.stringify({ openRouterKey: key.trim() }), { mode: 0o600 }); renameSync(temporary, this.path); try { chmodSync(this.path, 0o600) } catch { /* Windows ACLs are managed by the OS. */ } }
+  private read(): { openRouterKey?: string; selectedLocalModel?: string; theme?: 'light' | 'dark' | 'system'; density?: 'default' | 'compact' } { try { return JSON.parse(readFileSync(this.path, 'utf8')) as ReturnType<TranscriptionConfig['read']> } catch { return {} } }
+  private write(value: ReturnType<TranscriptionConfig['read']>): void { const temporary = `${this.path}.${randomUUID()}.tmp`; writeFileSync(temporary, JSON.stringify(value), { mode: 0o600 }); renameSync(temporary, this.path); try { chmodSync(this.path, 0o600) } catch { /* Windows ACLs are managed by the OS. */ } }
+  getKey(): string | null { const key = this.read().openRouterKey; return typeof key === 'string' && key ? key : null }
+  setKey(key: string): void { this.write({ ...this.read(), openRouterKey: key.trim() }) }
+  removeKey(): void { const value = this.read(); delete value.openRouterKey; this.write(value) }
+  selectedModel(): string { const selected = this.read().selectedLocalModel; return WhisperModelManager.catalog.some((model) => model.id === selected) ? selected! : 'ggml-small.bin' }
+  setSelectedModel(modelId: string): void { this.write({ ...this.read(), selectedLocalModel: modelId }) }
+  preferences() { const value = this.read(); return { theme: value.theme ?? 'system', density: value.density ?? 'default' } }
+  setPreferences(input: Partial<{ theme: 'light' | 'dark' | 'system'; density: 'default' | 'compact' }>) { this.write({ ...this.read(), ...input }) }
 }

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Asset, AssetDiagnostics, AssetKind, Block, BlockRelation, BlockSource, BlockType, Notebook, NotebookTree, Note, Page, PageWorkspace, RelationType, SearchResult, SourceDocument, TextBlockType, TrashEntityType, TrashRecord } from '../../shared/domain'
@@ -10,7 +10,7 @@ import { ExportService, validateLosslessArchive } from './export-service'
 import { JobService } from './job-service'
 import { ThumbnailService } from './thumbnail-service'
 import { PdfRenderer } from './pdf-renderer'
-import type { ExportFormat, ExportResult, ExportScope, ImportResult, Job, TranscriptionProviderName, TranscriptionRun, TranscriptionSettings } from '../../shared/domain'
+import type { AppPreferences, ExportFormat, ExportResult, ExportScope, ImportResult, Job, LibraryMigrationStatus, StorageSummary, TranscriptionProviderName, TranscriptionRun, TranscriptionSettings, WhisperModel } from '../../shared/domain'
 
 type DeletedRow = { deleted_at: string | null; deletion_operation_id: string | null }
 type NotebookRow = { id: string; title: string; created_at: string; updated_at: string } & DeletedRow
@@ -56,18 +56,26 @@ export class NotebookService {
   private readonly databasePath: string
   private readonly thumbnails: ThumbnailService
   private readonly pdfRenderer: PdfRenderer
+  private readonly configDirectory: string
+  private readonly libraryRoot: string
+  private readonly bootstrapPath: string | null
+  private migration: LibraryMigrationStatus = { state: 'idle', destination: null, error: null }
 
-  constructor(database: NotebookDatabase, assetsDirectory = join(tmpdir(), 'research-notebook-assets'), configDirectory = join(tmpdir(), 'research-notebook-config'), localWhisper?: { binaryPath: string | null; modelPath: string | null }) {
+  constructor(database: NotebookDatabase, assetsDirectory = join(tmpdir(), 'research-notebook-assets'), configDirectory = join(tmpdir(), 'research-notebook-config'), localWhisper?: { binaryPath: string | null; modelPath: string | null }, library?: { root: string; bootstrapPath: string; previousRoot?: string | null }) {
     this.db = database.connection
     this.databasePath = database.path
     this.assetsDirectory = resolve(assetsDirectory)
+    this.configDirectory = resolve(configDirectory)
+    this.libraryRoot = resolve(library?.root ?? dirname(this.databasePath))
+    this.bootstrapPath = library?.bootstrapPath ?? null
+    if (library?.previousRoot) this.migration = { state: 'active', destination: library.previousRoot, error: null }
     for (const folder of ['images', 'screenshots', 'audio', 'files']) mkdirSync(join(this.assetsDirectory, folder), { recursive: true })
     this.transcriptionConfig = new TranscriptionConfig(configDirectory)
     this.whisperModels = new WhisperModelManager(join(configDirectory, 'whisper-models'), localWhisper?.binaryPath ?? null)
     this.transcription = new TranscriptionService(this.db, (path) => this.absoluteAssetPath(path), {
-      local: new WhisperCppProvider(() => ({ binaryPath: this.whisperModels.getStatus().binaryPath, modelPath: localWhisper?.modelPath ?? this.whisperModels.path() })),
+      local: new WhisperCppProvider(() => { const selected = this.transcriptionConfig.selectedModel(); const local = this.whisperModels.getStatus(selected); return { binaryPath: local.binaryPath, modelPath: localWhisper?.modelPath ?? local.modelPath } }),
       openrouter: new OpenRouterProvider(() => this.transcriptionConfig.getKey())
-    }, () => { const local = this.whisperModels.getStatus(); return { openRouterConfigured: Boolean(this.transcriptionConfig.getKey()), localModels: ['ggml-small.bin'], openRouterModels: ['openai/whisper-large-v3'], localBinaryAvailable: Boolean(local.binaryPath), localModelAvailable: local.available, selectedLocalModel: { id: 'ggml-small.bin', displayName: 'Whisper Small (multilingual)', sizeBytes: 466_000_000 }, localDownload: local.download } })
+    }, () => { const selected = this.transcriptionConfig.selectedModel(); const local = this.whisperModels.getStatus(selected); const descriptor = WhisperModelManager.catalog.find((model) => model.id === selected)!; return { openRouterConfigured: Boolean(this.transcriptionConfig.getKey()), localModels: this.whisperModels.list().filter((model) => model.installed).map((model) => model.id), openRouterModels: ['openai/whisper-large-v3'], localBinaryAvailable: Boolean(local.binaryPath), localModelAvailable: local.available, selectedLocalModel: local.available ? { id: descriptor.id, displayName: descriptor.displayName, sizeBytes: descriptor.sizeBytes } : null, localDownload: local.download } })
     this.exports = new ExportService(this.db, (path) => this.absoluteAssetPath(path))
     this.pdfRenderer = new PdfRenderer()
     this.thumbnails = new ThumbnailService(this.db, join(this.assetsDirectory, '.thumbnails'), (path) => this.absoluteAssetPath(path))
@@ -101,6 +109,8 @@ export class NotebookService {
       return { transcriptionRunId: run.id }
     })
     this.jobs.register('backup', async (payload, progress, cancelled) => this.backupLibrary(String(payload.destination), progress, cancelled))
+    this.jobs.register('model-download', async (payload, progress, cancelled) => { await this.whisperModels.download(String(payload.modelId), cancelled, progress); return { modelId: String(payload.modelId) } })
+    this.jobs.register('library-move', async (payload, progress, cancelled) => this.moveLibrary(String(payload.destination), progress, cancelled))
   }
 
   listNotebooks(): NotebookTree[] {
@@ -330,8 +340,8 @@ export class NotebookService {
     try { const asset = this.insertWrittenAsset(notebook.notebook_id, 'audio', relativePath, filename.replace(/[^A-Za-z0-9._ -]/g, '_').slice(0, 180), 'audio/wav'); const durationMs = Math.round((bytes.length - 44) / 32000 * 1000); const block = this.createBlock(noteId, 'audio', { assetId: asset.id, filename: asset.originalFilename, mimeType: 'audio/wav', durationMs }); this.db.prepare('INSERT INTO asset_references (asset_id, block_id, created_at) VALUES (?, ?, ?)').run(asset.id, block.id, now()); return block } catch (error) { rmSync(this.absoluteAssetPath(relativePath), { force: true }); throw error }
   }
   async createTranscription(blockId: string, provider: TranscriptionProviderName, model?: string, language?: string): Promise<Job | TranscriptionRun> {
-    const chosen = model ?? (provider === 'local' ? 'ggml-small.bin' : 'openai/whisper-large-v3')
-    if (provider === 'local') { if (!this.whisperModels.getStatus().binaryPath) throw new Error('Local transcription is unavailable because the bundled Whisper sidecar is missing.'); await this.whisperModels.ensure() }
+    const chosen = model ?? (provider === 'local' ? this.transcriptionConfig.selectedModel() : 'openai/whisper-large-v3')
+    if (provider === 'local') { const local = this.whisperModels.getStatus(chosen); if (!local.binaryPath) throw new Error('Local transcription is unavailable because the bundled Whisper sidecar is missing.'); if (!local.available) throw new Error('Download the selected Whisper model in Settings before starting local transcription.') }
     const run = this.transcription.create(blockId, provider, chosen, language)
     if (provider === 'local') return this.jobs.start('transcription', { runId: run.id })
     return this.transcription.execute(run.id)
@@ -345,6 +355,14 @@ export class NotebookService {
   }
   transcriptionSettings(): TranscriptionSettings { return this.transcription.getSettings() }
   setOpenRouterKey(key: string): void { if (key.length > 1000) throw new Error('The OpenRouter key is too long.'); this.transcriptionConfig.setKey(key) }
+  removeOpenRouterKey(): void { this.transcriptionConfig.removeKey() }
+  preferences(): AppPreferences { return this.transcriptionConfig.preferences() }
+  updatePreferences(input: Partial<AppPreferences>): AppPreferences { this.transcriptionConfig.setPreferences(input); return this.preferences() }
+  listWhisperModels(): WhisperModel[] { return this.whisperModels.list() }
+  downloadWhisperModel(modelId: string): Job { if (this.whisperModels.getStatus(modelId).available) throw new Error('This Whisper model is already installed.'); return this.jobs.start('model-download', { modelId }) }
+  cancelWhisperModelDownload(modelId: string): void { const active = this.jobs.list().find((job) => job.kind === 'model-download' && ['queued', 'running'].includes(job.status) && this.jobPayloadModel(job.id) === modelId); if (active) this.jobs.cancel(active.id); else if (!this.whisperModels.getStatus(modelId).available) throw new Error('No download is running for this model.') }
+  removeWhisperModel(modelId: string): void { if (modelId === this.transcriptionConfig.selectedModel()) throw new Error('Choose another installed default model before removing this one.'); this.whisperModels.remove(modelId) }
+  setDefaultWhisperModel(modelId: string): void { if (!this.whisperModels.getStatus(modelId).available) throw new Error('Download this Whisper model before choosing it as default.'); this.transcriptionConfig.setSelectedModel(modelId) }
   export(scope: ExportScope, format: ExportFormat, destination: string): ExportResult { return this.exports.start(scope, format, destination) }
   startExport(scope: ExportScope, format: ExportFormat, destination: string) { return this.jobs.start(format === 'pdf' ? 'pdf' : 'export', { scope, format, destination }) }
   listJobs() { return this.jobs.list() }
@@ -353,6 +371,10 @@ export class NotebookService {
   retryJob(jobId: string) { return this.jobs.retry(jobId) }
   startIntegrityScan(notebookId: string) { return this.jobs.start('asset-integrity', { notebookId }) }
   startBackup(destination: string) { return this.jobs.start('backup', { destination }) }
+  storageSummary(): StorageSummary { return { libraryPath: this.libraryRoot, databaseBytes: existsSync(this.databasePath) ? statSync(this.databasePath).size : 0, assetsBytes: this.directoryBytes(this.assetsDirectory), modelsBytes: this.directoryBytes(join(this.configDirectory, 'whisper-models')), oldLibraryPath: this.migration.state === 'active' ? this.migration.destination : null, migration: this.migration } }
+  migrationStatus(): LibraryMigrationStatus { return this.migration }
+  startLibraryMove(destination: string): Job { if (this.databasePath === ':memory:') throw new Error('A disk-backed library is required for migration.'); if (this.migration.state === 'copying') throw new Error('A library move is already in progress.'); return this.jobs.start('library-move', { destination }) }
+  removeOldLibrary(): void { if (this.migration.state !== 'active' || !this.migration.destination) throw new Error('There is no retained original library to remove.'); const old = resolve(this.migration.destination); if (old === this.libraryRoot) throw new Error('The active library cannot be removed.'); if (this.bootstrapPath && dirname(this.bootstrapPath) === old) { for (const name of ['database.sqlite', 'database.sqlite-wal', 'database.sqlite-shm', 'assets', 'config']) rmSync(join(old, name), { recursive: name === 'assets' || name === 'config', force: true }) } else rmSync(old, { recursive: true, force: true }); if (this.bootstrapPath) { const temporary = `${this.bootstrapPath}.${randomUUID()}.tmp`; writeFileSync(temporary, JSON.stringify({ activeRoot: this.libraryRoot, previousRoot: null }), { mode: 0o600 }); renameSync(temporary, this.bootstrapPath) } this.migration = { state: 'idle', destination: null, error: null } }
   diagnostics() { return this.jobs.diagnostics() }
   exportDiagnostics(destination: string) { return this.jobs.exportDiagnostics(destination) }
   /** Import is deliberately copy-on-import: archive IDs never enter the live database. */
@@ -447,6 +469,43 @@ export class NotebookService {
     } catch (error) { rmSync(staging, { recursive: true, force: true }); throw error }
   }
   private listAssetsForBackup(): Asset[] { return (this.db.prepare('SELECT * FROM assets').all() as AssetRow[]).map(asAsset) }
+
+  /** Copy into a sibling staging directory; only the final pointer is written after every check passes. */
+  private async moveLibrary(destination: string, progress: (value: number) => void, cancelled: () => boolean): Promise<Record<string, unknown>> {
+    const parent = resolve(destination); const target = join(parent, `research-notebook-library-${Date.now()}`); const staging = `${target}.staging-${randomUUID()}`
+    if (target.startsWith(`${this.libraryRoot}/`) || this.libraryRoot.startsWith(`${target}/`)) throw new Error('Choose a location outside the current library.')
+    this.migration = { state: 'copying', destination: target, error: null }
+    try {
+      mkdirSync(staging, { recursive: true })
+      progress(5); if (cancelled()) throw new Error('Cancelled')
+      this.db.exec(`VACUUM INTO '${join(staging, 'database.sqlite').replace(/'/g, "''")}'`)
+      progress(25); if (cancelled()) throw new Error('Cancelled')
+      if (existsSync(this.assetsDirectory)) cpSync(this.assetsDirectory, join(staging, 'assets'), { recursive: true })
+      progress(60); if (cancelled()) throw new Error('Cancelled')
+      if (existsSync(this.configDirectory)) cpSync(this.configDirectory, join(staging, 'config'), { recursive: true })
+      const copiedAssets = join(staging, 'assets')
+      for (const asset of this.listAssetsForBackup()) {
+        if (cancelled()) throw new Error('Cancelled')
+        const file = join(copiedAssets, asset.relativePath.replace(/^assets\//, ''))
+        if (!existsSync(file) || !asset.sha256 || createHash('sha256').update(readFileSync(file)).digest('hex') !== asset.sha256) throw new Error('Library move verification failed for a managed asset.')
+      }
+      for (const model of WhisperModelManager.catalog) {
+        const file = join(staging, 'config', 'whisper-models', model.id)
+        if (existsSync(file) && createHash('sha256').update(readFileSync(file)).digest('hex') !== model.sha256) throw new Error('Library move verification failed for a Whisper model.')
+      }
+      // The snapshot is a separate SQLite file; integrity_check detects a damaged copy before activation.
+      const snapshot = new NotebookDatabase(join(staging, 'database.sqlite'))
+      try { const integrity = snapshot.connection.prepare('PRAGMA integrity_check').get() as { integrity_check?: string }; if (integrity.integrity_check !== 'ok') throw new Error('Library move verification failed for the database snapshot.') } finally { snapshot.close() }
+      progress(90); if (cancelled()) throw new Error('Cancelled')
+      renameSync(staging, target)
+      if (!this.bootstrapPath) throw new Error('This installation cannot activate a relocated library.')
+      const pointerTemporary = `${this.bootstrapPath}.${randomUUID()}.tmp`; writeFileSync(pointerTemporary, JSON.stringify({ activeRoot: target, previousRoot: this.libraryRoot }), { mode: 0o600 }); renameSync(pointerTemporary, this.bootstrapPath)
+      this.migration = { state: 'pending-restart', destination: target, error: null }; progress(100)
+      return { destination: target, restartRequired: true }
+    } catch (error) { rmSync(staging, { recursive: true, force: true }); this.migration = { state: 'failed', destination: target, error: error instanceof Error ? error.message : 'Library move failed.' }; throw error }
+  }
+  private directoryBytes(directory: string): number { if (!existsSync(directory)) return 0; return readdirSync(directory, { withFileTypes: true }).reduce((total, entry) => total + (entry.isDirectory() ? this.directoryBytes(join(directory, entry.name)) : entry.isFile() ? statSync(join(directory, entry.name)).size : 0), 0) }
+  private jobPayloadModel(jobId: string): string | null { try { const row = this.db.prepare('SELECT payload_json FROM jobs WHERE id = ?').get(jobId) as { payload_json: string } | undefined; const value = row ? JSON.parse(row.payload_json) as { modelId?: unknown } : {}; return typeof value.modelId === 'string' ? value.modelId : null } catch { return null } }
 
   importPdf(notebookId: string, sourcePath: string): SourceDocument {
     const asset = this.importAsset(notebookId, 'file', sourcePath)
