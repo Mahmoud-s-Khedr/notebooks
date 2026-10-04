@@ -1,0 +1,7 @@
+/* Document-integrated audio and transcription controls. */
+.audio-block { flex-wrap: wrap; }
+.audio-block audio { max-width: 430px; }
+.transcription { width: 100%; margin-top: 7px; padding: 8px; border-left: 3px solid #29906c; background: #f4faf7; }
+.transcription > div { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.transcription select, .transcription input { height: 29px; padding: 0 5px; font-size: 12px; }
+.transcription small { display: block; margin-top: 6px; color: #61728a; font-size: 11px; }
