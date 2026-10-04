@@ -10,6 +10,7 @@ import { ExportService, validateLosslessArchive } from './export-service'
 import { JobService } from './job-service'
 import { ThumbnailService } from './thumbnail-service'
 import { PdfRenderer } from './pdf-renderer'
+import { ErrorLogService } from './error-log-service'
 import type { AppPreferences, ExportFormat, ExportResult, ExportScope, ImportResult, Job, LibraryMigrationStatus, StorageSummary, TranscriptionProviderName, TranscriptionRun, TranscriptionSettings, WhisperModel } from '../../shared/domain'
 
 type DeletedRow = { deleted_at: string | null; deletion_operation_id: string | null }
@@ -53,6 +54,7 @@ export class NotebookService {
   private readonly transcriptionConfig: TranscriptionConfig
   private readonly whisperModels: WhisperModelManager
   private readonly jobs: JobService
+  private readonly errors: ErrorLogService
   private readonly databasePath: string
   private readonly thumbnails: ThumbnailService
   private readonly pdfRenderer: PdfRenderer
@@ -61,7 +63,7 @@ export class NotebookService {
   private readonly bootstrapPath: string | null
   private migration: LibraryMigrationStatus = { state: 'idle', destination: null, error: null }
 
-  constructor(database: NotebookDatabase, assetsDirectory = join(tmpdir(), 'research-notebook-assets'), configDirectory = join(tmpdir(), 'research-notebook-config'), localWhisper?: { binaryPath: string | null; modelPath: string | null }, library?: { root: string; bootstrapPath: string; previousRoot?: string | null }) {
+  constructor(database: NotebookDatabase, assetsDirectory = join(tmpdir(), 'research-notebook-assets'), configDirectory = join(tmpdir(), 'research-notebook-config'), localWhisper?: { binaryPath: string | null; modelPath: string | null }, library?: { root: string; bootstrapPath: string; previousRoot?: string | null }, errors?: ErrorLogService) {
     this.db = database.connection
     this.databasePath = database.path
     this.assetsDirectory = resolve(assetsDirectory)
@@ -79,7 +81,8 @@ export class NotebookService {
     this.exports = new ExportService(this.db, (path) => this.absoluteAssetPath(path))
     this.pdfRenderer = new PdfRenderer()
     this.thumbnails = new ThumbnailService(this.db, join(this.assetsDirectory, '.thumbnails'), (path) => this.absoluteAssetPath(path))
-    this.jobs = new JobService(this.db)
+    this.errors = errors ?? new ErrorLogService(this.db, join(this.libraryRoot, 'error-events-fallback.ndjson'), null, true)
+    this.jobs = new JobService(this.db, this.errors)
     this.jobs.register('export', async (payload, progress, cancelled) => {
       progress(5); if (cancelled()) throw new Error('Cancelled')
       const result = this.exports.start(payload.scope as ExportScope, payload.format as ExportFormat, String(payload.destination))
@@ -105,7 +108,7 @@ export class NotebookService {
     this.jobs.register('transcription', async (payload, progress, cancelled) => {
       const run = await this.transcription.execute(String(payload.runId), cancelled, (value) => progress(value))
       if (run.status === 'cancelled') throw new Error('Cancelled')
-      if (run.status !== 'completed') throw new Error('Local transcription failed.')
+      if (run.status !== 'completed') throw new Error(run.errorMessage ?? 'Local transcription failed.')
       return { transcriptionRunId: run.id }
     })
     this.jobs.register('backup', async (payload, progress, cancelled) => this.backupLibrary(String(payload.destination), progress, cancelled))
@@ -376,6 +379,9 @@ export class NotebookService {
   startLibraryMove(destination: string): Job { if (this.databasePath === ':memory:') throw new Error('A disk-backed library is required for migration.'); if (this.migration.state === 'copying') throw new Error('A library move is already in progress.'); return this.jobs.start('library-move', { destination }) }
   removeOldLibrary(): void { if (this.migration.state !== 'active' || !this.migration.destination) throw new Error('There is no retained original library to remove.'); const old = resolve(this.migration.destination); if (old === this.libraryRoot) throw new Error('The active library cannot be removed.'); if (this.bootstrapPath && dirname(this.bootstrapPath) === old) { for (const name of ['database.sqlite', 'database.sqlite-wal', 'database.sqlite-shm', 'assets', 'config']) rmSync(join(old, name), { recursive: name === 'assets' || name === 'config', force: true }) } else rmSync(old, { recursive: true, force: true }); if (this.bootstrapPath) { const temporary = `${this.bootstrapPath}.${randomUUID()}.tmp`; writeFileSync(temporary, JSON.stringify({ activeRoot: this.libraryRoot, previousRoot: null }), { mode: 0o600 }); renameSync(temporary, this.bootstrapPath) } this.migration = { state: 'idle', destination: null, error: null } }
   diagnostics() { return this.jobs.diagnostics() }
+  listErrors(filter?: import('../../shared/domain').ErrorEventFilter) { return this.errors.list(filter) }
+  getError(id: string) { return this.errors.get(id) }
+  reportRendererError(report: import('../../shared/domain').RendererErrorReport) { this.errors.reportRenderer(report) }
   exportDiagnostics(destination: string) { return this.jobs.exportDiagnostics(destination) }
   /** Import is deliberately copy-on-import: archive IDs never enter the live database. */
   importLossless(archivePath: string): ImportResult {

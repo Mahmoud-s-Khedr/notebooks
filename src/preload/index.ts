@@ -42,7 +42,10 @@ const api: ResearchNotebookApi = {
   exports: { start: (input) => ipcRenderer.invoke('exports:start', input) },
   jobs: { list: () => ipcRenderer.invoke('jobs:list'), cancel: (input) => ipcRenderer.invoke('jobs:cancel', input), retry: (input) => ipcRenderer.invoke('jobs:retry', input) },
   backups: { start: () => ipcRenderer.invoke('backups:start') },
-  diagnostics: { list: () => ipcRenderer.invoke('diagnostics:list'), export: () => ipcRenderer.invoke('diagnostics:export') },
+  diagnostics: {
+    list: () => ipcRenderer.invoke('diagnostics:list'), listErrors: (input) => ipcRenderer.invoke('diagnostics:list-errors', input), getError: (input) => ipcRenderer.invoke('diagnostics:get-error', input),
+    reportError: (input) => ipcRenderer.invoke('diagnostics:report-error', input), export: () => ipcRenderer.invoke('diagnostics:export')
+  },
   imports: { start: () => ipcRenderer.invoke('imports:start') },
   sources: {
     importPdf: (input) => ipcRenderer.invoke('sources:import-pdf', input), list: (input) => ipcRenderer.invoke('sources:list', input), getBlockSource: (input) => ipcRenderer.invoke('sources:get-block-source', input),
@@ -64,3 +67,13 @@ const api: ResearchNotebookApi = {
 }
 
 contextBridge.exposeInMainWorld('researchNotebook', api)
+
+// This is deliberately best-effort: diagnostics must never alter normal renderer behavior.
+const report = (input: Parameters<ResearchNotebookApi['diagnostics']['reportError']>[0]) => {
+  void ipcRenderer.invoke('diagnostics:report-error', input).catch(() => undefined)
+}
+window.addEventListener('error', (event) => report({ severity: 'error', category: 'window.error', message: event.message || 'Unhandled renderer error', stack: event.error instanceof Error ? event.error.stack : undefined, context: { filename: event.filename, line: event.lineno, column: event.colno } }))
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason
+  report({ severity: 'error', category: 'window.unhandledrejection', message: reason instanceof Error ? reason.message : String(reason ?? 'Unhandled promise rejection'), stack: reason instanceof Error ? reason.stack : undefined })
+})

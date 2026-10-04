@@ -50,6 +50,14 @@ export type JobKind = 'export' | 'pdf' | 'asset-integrity' | 'backup' | 'thumbna
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 export interface Job { id: string; kind: JobKind; status: JobStatus; progress: number; errorMessage: string | null; result: Record<string, unknown> | null; attempts: number; createdAt: string; startedAt: string | null; completedAt: string | null }
 export interface DiagnosticEvent { category: string; outcome: string; code: string | null; message: string | null; durationMs: number | null; createdAt: string }
+export type ErrorSeverity = 'warning' | 'error' | 'fatal'
+export type ErrorProcess = 'renderer' | 'preload' | 'main' | 'service' | 'job' | 'lifecycle'
+export interface ErrorEvent {
+  id: string; createdAt: string; severity: ErrorSeverity; process: ErrorProcess; layer: string; category: string; code: string | null
+  message: string; stack: string | null; causeChain: string | null; context: Record<string, unknown>; appVersion: string | null; operationId: string | null; ipcId: string | null
+}
+export interface ErrorEventFilter { process?: ErrorProcess; category?: string; severity?: ErrorSeverity; limit?: number }
+export interface RendererErrorReport { severity?: ErrorSeverity; category: string; message: string; stack?: string; causeChain?: string; context?: Record<string, unknown>; operationId?: string }
 export interface ImportResult { notebook: Notebook; importedAssets: number }
 
 export interface TrashRecord {
@@ -99,7 +107,10 @@ export interface ResearchNotebookApi {
   exports: { start(input: { scope: ExportScope; format: ExportFormat }): Promise<Job> }
   jobs: { list(): Promise<Job[]>; cancel(input: { jobId: string }): Promise<Job>; retry(input: { jobId: string }): Promise<Job> }
   backups: { start(): Promise<Job> }
-  diagnostics: { list(): Promise<DiagnosticEvent[]>; export(): Promise<string | null> }
+  diagnostics: {
+    list(): Promise<DiagnosticEvent[]>; listErrors(input?: ErrorEventFilter): Promise<ErrorEvent[]>; getError(input: { id: string }): Promise<ErrorEvent | null>
+    reportError(input: RendererErrorReport): Promise<void>; export(): Promise<string | null>
+  }
   imports: { start(): Promise<ImportResult | null> }
   sources: {
     importPdf(input: { notebookId: string }): Promise<SourceDocument | null>; list(input: { notebookId: string }): Promise<SourceDocument[]>; getBlockSource(input: { blockId: string }): Promise<BlockSource | null>

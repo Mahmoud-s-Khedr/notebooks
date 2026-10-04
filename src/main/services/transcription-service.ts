@@ -79,9 +79,11 @@ export class WhisperCppProvider implements TranscriptionProvider {
     const args = ['-m', modelPath, '-f', input.audioPath, '-otxt', '-oj', '-of', output.replace(/\.txt$/, '')]
     if (input.language) args.push('-l', input.language)
     let child: ReturnType<typeof spawn> | null = null
+    let stderr = ''
     try {
       await new Promise<void>((resolveRun, rejectRun) => {
         child = spawn(binaryPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+        child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); if (stderr.length > 1000) stderr = stderr.slice(-1000) })
         let terminated = false
         const timer = setInterval(() => {
           if (!input.cancelled?.() || !child || terminated) return
@@ -89,9 +91,9 @@ export class WhisperCppProvider implements TranscriptionProvider {
           setTimeout(() => { if (child && !child.killed) child.kill('SIGKILL') }, 2000).unref()
         }, 75)
         child.once('error', (error) => { clearInterval(timer); rejectRun(error) })
-        child.once('close', (code) => { clearInterval(timer); if (input.cancelled?.()) rejectRun(new Error('Cancelled')); else if (code === 0) resolveRun(); else rejectRun(new Error('Whisper exited unsuccessfully.')) })
+        child.once('close', (code) => { clearInterval(timer); if (input.cancelled?.()) rejectRun(new Error('Cancelled')); else if (code === 0) resolveRun(); else rejectRun(new Error(stderr.trim() || `Whisper exited with code ${code ?? 'unknown'}.`)) })
       })
-    } catch (error) { rmSync(output, { force: true }); rmSync(output.replace(/\.txt$/, '.json'), { force: true }); if (input.cancelled?.()) throw new Error('Cancelled'); throw new Error('Local Whisper could not transcribe this recording. Check that the WAV is supported and try again.') }
+    } catch (error) { rmSync(output, { force: true }); rmSync(output.replace(/\.txt$/, '.json'), { force: true }); if (input.cancelled?.()) throw new Error('Cancelled'); const detail = error instanceof Error ? error.message.replace(/[\r\n]+/g, ' ').replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]').slice(0, 350) : ''; throw new Error(detail ? `Local Whisper could not transcribe this recording: ${detail}` : 'Local Whisper could not transcribe this recording. Check that the WAV is supported and try again.') }
     const text = readFileSync(output, 'utf8').trim()
     const jsonPath = output.replace(/\.txt$/, '.json'); let segments: NormalizedTranscript['segments'] = []
     try { const payload = JSON.parse(readFileSync(jsonPath, 'utf8')) as { transcription?: Array<{ offsets?: { from?: number; to?: number }; text?: string }> }; segments = (payload.transcription ?? []).map((segment) => ({ startMs: Math.max(0, segment.offsets?.from ?? 0), endMs: Math.max(0, segment.offsets?.to ?? 0), text: segment.text ?? '' })) } catch { /* older sidecars only produce text */ }

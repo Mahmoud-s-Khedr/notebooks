@@ -1,7 +1,9 @@
 import { dialog, ipcMain } from 'electron'
 import { z } from 'zod'
+import { randomUUID } from 'node:crypto'
 import { blockTypes, relationTypes, textBlockTypes } from '../../shared/domain'
 import { NotebookService } from '../services/notebook-service'
+import type { ErrorLogService } from '../services/error-log-service'
 
 const titleSchema = z.string().trim().min(1, 'A title is required.').max(500, 'Titles must be 500 characters or fewer.')
 const idSchema = z.string().uuid('Expected a valid item ID.')
@@ -16,12 +18,32 @@ const transcriptionProviderSchema = z.enum(['local', 'openrouter'])
 const languageSchema = z.string().regex(/^[a-z]{2,3}(?:-[A-Z]{2})?$/).max(10)
 const optionalLanguageSchema = z.preprocess((value) => typeof value === 'string' ? value.trim() || undefined : value, languageSchema.optional())
 const exportScopeSchema = z.discriminatedUnion('type', [z.object({ type: z.literal('notebook'), notebookId: idSchema }).strict(), z.object({ type: z.literal('page'), pageId: idSchema }).strict(), z.object({ type: z.literal('note'), noteId: idSchema }).strict()])
+const errorProcessSchema = z.enum(['renderer', 'preload', 'main', 'service', 'job', 'lifecycle'])
+const errorSeveritySchema = z.enum(['warning', 'error', 'fatal'])
+const rendererErrorSchema = z.object({ severity: errorSeveritySchema.optional(), category: z.string().trim().min(1).max(120), message: z.string().min(1).max(100_000), stack: z.string().max(250_000).optional(), causeChain: z.string().max(250_000).optional(), context: z.record(z.string().max(100), z.unknown()).optional(), operationId: z.string().max(120).optional() }).strict()
+const errorFilterSchema = z.object({ process: errorProcessSchema.optional(), category: z.string().trim().min(1).max(120).optional(), severity: errorSeveritySchema.optional(), limit: z.number().int().min(1).max(1000).optional() }).strict()
 
-function register<Schema extends z.ZodType>(channel: string, schema: Schema, handler: (input: z.output<Schema>) => unknown): void {
-  ipcMain.handle(channel, (_event, input: unknown) => handler(schema.parse(input)))
+function contextIsBounded(value: unknown, depth = 0): boolean {
+  if (depth > 6) return false
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') return true
+  if (typeof value === 'string') return value.length <= 20_000
+  if (Array.isArray(value)) return value.length <= 100 && value.every((item) => contextIsBounded(item, depth + 1))
+  return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, unknown>).length <= 100 && Object.values(value as Record<string, unknown>).every((item) => contextIsBounded(item, depth + 1)))
 }
 
-export function registerNotebookIpc(service: NotebookService): void {
+function registerIpc<Schema extends z.ZodType>(errors: ErrorLogService, channel: string, schema: Schema, handler: (input: z.output<Schema>) => unknown): void {
+  ipcMain.handle(channel, async (_event, input: unknown) => {
+    const ipcId = randomUUID()
+    try { return await handler(schema.parse(input)) }
+    catch (error) {
+      errors.record(error, { process: 'main', layer: 'ipc', category: channel, code: error instanceof z.ZodError ? 'IPC_VALIDATION_FAILED' : 'IPC_HANDLER_FAILED', ipcId, context: { channel } })
+      throw error
+    }
+  })
+}
+
+export function registerNotebookIpc(service: NotebookService, errors: ErrorLogService): void {
+  const register = <Schema extends z.ZodType>(channel: string, schema: Schema, handler: (input: z.output<Schema>) => unknown) => registerIpc(errors, channel, schema, handler)
   register('notebooks:list', z.undefined(), () => service.listNotebooks())
   register('notebooks:create', z.object({ title: titleSchema }).strict(), (input) => service.createNotebook(input.title))
   register('notebooks:update', z.object({ notebookId: idSchema, title: titleSchema }).strict(), (input) => service.updateNotebook(input.notebookId, input.title))
@@ -99,6 +121,12 @@ export function registerNotebookIpc(service: NotebookService): void {
     return service.startBackup(picked.filePaths[0])
   })
   register('diagnostics:list', z.undefined(), () => service.diagnostics())
+  register('diagnostics:list-errors', errorFilterSchema.optional(), (input) => service.listErrors(input))
+  register('diagnostics:get-error', z.object({ id: idSchema }).strict(), (input) => service.getError(input.id))
+  register('diagnostics:report-error', rendererErrorSchema, (input) => {
+    if (!contextIsBounded(input.context)) throw new Error('Renderer diagnostic context exceeds safe limits.')
+    service.reportRendererError(input)
+  })
   register('diagnostics:export', z.undefined(), async () => {
     const picked = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Choose diagnostics export folder' })
     return picked.canceled || !picked.filePaths[0] ? null : service.exportDiagnostics(picked.filePaths[0])

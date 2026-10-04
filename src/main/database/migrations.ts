@@ -263,6 +263,31 @@ const migrations: Migration[] = [
       CREATE INDEX asset_thumbnails_asset_idx ON asset_thumbnails(asset_id);
     `
   }
+  ,{
+    version: 7,
+    name: 'persistent_cross_process_error_events',
+    sql: `
+      CREATE TABLE error_events (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        process TEXT NOT NULL,
+        layer TEXT NOT NULL,
+        category TEXT NOT NULL,
+        code TEXT,
+        message TEXT NOT NULL,
+        stack TEXT,
+        cause_chain TEXT,
+        context_json TEXT NOT NULL DEFAULT '{}',
+        app_version TEXT,
+        operation_id TEXT,
+        ipc_id TEXT
+      );
+      CREATE INDEX error_events_created_idx ON error_events(created_at DESC);
+      CREATE INDEX error_events_process_category_created_idx ON error_events(process, category, created_at DESC);
+      CREATE INDEX error_events_severity_created_idx ON error_events(severity, created_at DESC);
+    `
+  }
 ]
 
 export function runMigrations(database: Database.Database): void {
