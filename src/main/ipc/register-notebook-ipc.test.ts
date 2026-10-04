@@ -7,7 +7,10 @@ const state = vi.hoisted(() => ({ handlers: new Map<string, (event: unknown, inp
 
 vi.mock('electron', () => ({
   dialog: { showOpenDialog: vi.fn() },
-  ipcMain: { handle: (channel: string, handler: (event: unknown, input: unknown) => Promise<unknown>) => state.handlers.set(channel, handler) }
+  ipcMain: {
+    handle: (channel: string, handler: (event: unknown, input: unknown) => Promise<unknown>) =>
+      state.handlers.set(channel, handler)
+  }
 }))
 
 import { registerNotebookIpc } from './register-notebook-ipc'
@@ -26,12 +29,18 @@ describe('registered notebook IPC diagnostics', () => {
   })
   afterEach(() => database.close())
 
-  const invoke = (channel: string, input: unknown) => state.handlers.get(channel)?.({}, input) ?? Promise.reject(new Error(`Missing ${channel} handler`))
+  const invoke = (channel: string, input: unknown) =>
+    state.handlers.get(channel)?.({}, input) ?? Promise.reject(new Error(`Missing ${channel} handler`))
 
   it('records validation failures and rethrows the original rejection', async () => {
     await expect(invoke('notebooks:create', { title: '' })).rejects.toThrow('A title is required')
     const event = errors.list({ category: 'notebooks:create' })[0]
-    expect(event).toMatchObject({ process: 'main', layer: 'ipc', code: 'IPC_VALIDATION_FAILED', category: 'notebooks:create' })
+    expect(event).toMatchObject({
+      process: 'main',
+      layer: 'ipc',
+      code: 'IPC_VALIDATION_FAILED',
+      category: 'notebooks:create'
+    })
     expect(event.ipcId).toMatch(/^[0-9a-f-]{36}$/)
   })
 
@@ -44,9 +53,27 @@ describe('registered notebook IPC diagnostics', () => {
   })
 
   it('accepts bounded renderer reports and rejects unsafe renderer metadata', async () => {
-    await expect(invoke('diagnostics:report-error', { category: 'window.error', message: 'Renderer failed', stack: 'Error: Renderer failed', context: { filename: '/tmp/view.tsx' }, operationId: 'render-7' })).resolves.toBeUndefined()
-    expect(errors.list({ process: 'renderer' })[0]).toMatchObject({ category: 'window.error', operationId: 'render-7', context: { filename: '/tmp/view.tsx' } })
-    await expect(invoke('diagnostics:report-error', { category: 'window.error', message: 'too deep', context: { a: { b: { c: { d: { e: { f: { g: true } } } } } } } })).rejects.toThrow('safe limits')
+    await expect(
+      invoke('diagnostics:report-error', {
+        category: 'window.error',
+        message: 'Renderer failed',
+        stack: 'Error: Renderer failed',
+        context: { filename: '/tmp/view.tsx' },
+        operationId: 'render-7'
+      })
+    ).resolves.toBeUndefined()
+    expect(errors.list({ process: 'renderer' })[0]).toMatchObject({
+      category: 'window.error',
+      operationId: 'render-7',
+      context: { filename: '/tmp/view.tsx' }
+    })
+    await expect(
+      invoke('diagnostics:report-error', {
+        category: 'window.error',
+        message: 'too deep',
+        context: { a: { b: { c: { d: { e: { f: { g: true } } } } } } }
+      })
+    ).rejects.toThrow('safe limits')
     expect(errors.list({ category: 'diagnostics:report-error' })[0].code).toBe('IPC_HANDLER_FAILED')
   })
 })

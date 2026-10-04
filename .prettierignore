@@ -1,0 +1,8 @@
+coverage/
+dist/
+node_modules/
+out/
+release/
+third_party/
+.vite/
+docs/test-improvement-plan.md

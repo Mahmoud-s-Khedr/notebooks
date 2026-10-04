@@ -210,8 +210,8 @@ const migrations: Migration[] = [
         PRIMARY KEY(export_id, asset_id)
       );
     `
-  }
-  ,{
+  },
+  {
     version: 5,
     name: 'persistent_jobs_and_private_diagnostics',
     sql: `
@@ -243,8 +243,8 @@ const migrations: Migration[] = [
       );
       CREATE INDEX diagnostic_events_created_idx ON diagnostic_events(created_at DESC);
     `
-  }
-  ,{
+  },
+  {
     version: 6,
     name: 'managed_asset_thumbnail_cache',
     sql: `
@@ -262,8 +262,8 @@ const migrations: Migration[] = [
       );
       CREATE INDEX asset_thumbnails_asset_idx ON asset_thumbnails(asset_id);
     `
-  }
-  ,{
+  },
+  {
     version: 7,
     name: 'persistent_cross_process_error_events',
     sql: `
@@ -300,7 +300,10 @@ export function runMigrations(database: Database.Database): void {
   `)
 
   const applied = new Set(
-    database.prepare('SELECT version FROM schema_migrations').all().map((row) => (row as { version: number }).version)
+    database
+      .prepare('SELECT version FROM schema_migrations')
+      .all()
+      .map((row) => (row as { version: number }).version)
   )
 
   for (const migration of migrations) {

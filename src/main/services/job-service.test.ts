@@ -16,15 +16,23 @@ describe('JobService error diagnostics', () => {
   afterEach(() => databases.splice(0).forEach((database) => database.close()))
 
   it('records the underlying job failure without changing the user-facing job error', async () => {
-    const database = new NotebookDatabase(':memory:'); databases.push(database)
+    const database = new NotebookDatabase(':memory:')
+    databases.push(database)
     const errors = new ErrorLogService(database.connection, '/tmp/unused-job-errors.ndjson', 'test', true)
     const jobs = new JobService(database.connection, errors)
-    jobs.register('backup', async () => { throw new Error('Backup failed at /tmp/library/database.sqlite token=do-not-save') })
+    jobs.register('backup', async () => {
+      throw new Error('Backup failed at /tmp/library/database.sqlite token=do-not-save')
+    })
     const job = jobs.start('backup', {})
     await until(() => jobs.get(job.id).status === 'failed')
     expect(jobs.get(job.id).errorMessage).toContain('[path redacted]')
     const event = errors.list({ process: 'job' })[0]
-    expect(event).toMatchObject({ category: 'backup', code: 'JOB_FAILED', operationId: job.id, context: { jobId: job.id } })
+    expect(event).toMatchObject({
+      category: 'backup',
+      code: 'JOB_FAILED',
+      operationId: job.id,
+      context: { jobId: job.id }
+    })
     expect(event.message).toContain('/tmp/library/database.sqlite')
     expect(event.message).toContain('[REDACTED]')
   })

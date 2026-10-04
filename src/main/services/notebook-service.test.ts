@@ -33,7 +33,10 @@ describe('NotebookService', () => {
     const reloadedService = new NotebookService(reopenedDatabase)
     const restored = reloadedService.getPageWorkspace(page.id)
     expect(restored.notes).toHaveLength(1)
-    expect(restored.notes[0].blocks.map((block) => block.data.text)).toEqual(['Second explanation', 'First explanation'])
+    expect(restored.notes[0].blocks.map((block) => block.data.text)).toEqual([
+      'Second explanation',
+      'First explanation'
+    ])
     expect(reloadedService.listNotebooks()[0].pages[0].id).toBe(page.id)
     reopenedDatabase.close()
     databases.pop()
@@ -49,7 +52,9 @@ describe('NotebookService', () => {
     const note = service.createNote(page.id, 'Note')
     const block = service.createBlock(note.id, 'text')
 
-    expect(() => service.reorderBlocks(note.id, [block.id, crypto.randomUUID()])).toThrow('submitted order does not match')
+    expect(() => service.reorderBlocks(note.id, [block.id, crypto.randomUUID()])).toThrow(
+      'submitted order does not match'
+    )
     expect(service.getPageWorkspace(page.id).notes[0].blocks[0].id).toBe(block.id)
   })
 
@@ -70,10 +75,17 @@ describe('NotebookService', () => {
     service.restoreFromTrash('page', page.id, pageOperation.deletionOperationId)
     const restored = service.getPageWorkspace(page.id)
     expect(restored.notes[0].blocks.map(({ id }) => id)).toEqual([laterBlock.id])
-    expect(service.listTrash()).toEqual(expect.arrayContaining([expect.objectContaining({ id: earlierBlock.id, deletionOperationId: firstOperation.deletionOperationId })]))
+    expect(service.listTrash()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: earlierBlock.id, deletionOperationId: firstOperation.deletionOperationId })
+      ])
+    )
 
     service.restoreFromTrash('block', earlierBlock.id, firstOperation.deletionOperationId)
-    expect(service.getPageWorkspace(page.id).notes[0].blocks.map(({ id }) => id)).toEqual([earlierBlock.id, laterBlock.id])
+    expect(service.getPageWorkspace(page.id).notes[0].blocks.map(({ id }) => id)).toEqual([
+      earlierBlock.id,
+      laterBlock.id
+    ])
   })
 
   it('duplicates notes and blocks with fresh IDs while preserving ordered content', () => {
@@ -105,7 +117,9 @@ describe('NotebookService', () => {
     const question = service.createBlock(note.id, 'question', { text: 'Why?' })
     const answer = service.createBlock(note.id, 'answer', { text: 'Because.' })
     const relation = service.createRelation(answer.id, question.id, 'responds_to')
-    expect(service.listRelations(question.id)).toEqual([expect.objectContaining({ id: relation.id, relationType: 'responds_to' })])
+    expect(service.listRelations(question.id)).toEqual([
+      expect.objectContaining({ id: relation.id, relationType: 'responds_to' })
+    ])
 
     const otherNotebook = service.createNotebook('Other')
     const otherPage = service.createPage(otherNotebook.id, 'Other page')
@@ -125,7 +139,9 @@ describe('NotebookService', () => {
     const note = service.createNote(page.id, 'Energy')
     const block = service.createBlock(note.id, 'explanation', { text: 'ATP is produced in mitochondria.' })
 
-    expect(service.search('mitochondria').map(({ entityId }) => entityId)).toEqual(expect.arrayContaining([page.id, block.id]))
+    expect(service.search('mitochondria').map(({ entityId }) => entityId)).toEqual(
+      expect.arrayContaining([page.id, block.id])
+    )
     const operation = service.moveToTrash('block', block.id)
     expect(service.search('ATP')).toEqual([])
     service.restoreFromTrash('block', block.id, operation.deletionOperationId)
@@ -154,78 +170,142 @@ describe('NotebookService', () => {
 
   it('persists managed assets outside SQLite and protects referenced files from cleanup', () => {
     const directory = mkdtempSync(join(tmpdir(), 'research-notebook-assets-test-'))
-    const database = new NotebookDatabase(join(directory, 'database.sqlite')); databases.push(database)
+    const database = new NotebookDatabase(join(directory, 'database.sqlite'))
+    databases.push(database)
     const service = new NotebookService(database, join(directory, 'assets'))
-    const notebook = service.createNotebook('Visual research'); const page = service.createPage(notebook.id, 'Page'); const note = service.createNote(page.id, 'Note')
-    const incoming = join(directory, 'diagram.png'); writeFileSync(incoming, Buffer.from('not really a png'))
+    const notebook = service.createNotebook('Visual research')
+    const page = service.createPage(notebook.id, 'Page')
+    const note = service.createNote(page.id, 'Note')
+    const incoming = join(directory, 'diagram.png')
+    writeFileSync(incoming, Buffer.from('not really a png'))
     const asset = service.importAsset(notebook.id, 'image', incoming)
-    expect(asset.relativePath).toMatch(/^assets\/images\//); expect(asset.sha256).toHaveLength(64)
+    expect(asset.relativePath).toMatch(/^assets\/images\//)
+    expect(asset.sha256).toHaveLength(64)
     const block = service.attachAsset(note.id, asset.id, 'image')
     expect(service.getPageWorkspace(page.id).notes[0].blocks[0].data.assetId).toBe(asset.id)
     expect(() => service.removeAsset(asset.id)).toThrow('still referenced')
     expect(service.diagnoseAssets(notebook.id).orphaned).not.toContainEqual(expect.objectContaining({ id: asset.id }))
-    service.moveToTrash('block', block.id); service.permanentlyDelete('block', block.id)
+    service.moveToTrash('block', block.id)
+    service.permanentlyDelete('block', block.id)
     expect(service.diagnoseAssets(notebook.id).orphaned).toContainEqual(expect.objectContaining({ id: asset.id }))
     service.removeAsset(asset.id)
-    database.close(); databases.pop(); rmSync(directory, { recursive: true, force: true })
+    database.close()
+    databases.pop()
+    rmSync(directory, { recursive: true, force: true })
   })
 
   it('records PDF source text provenance and creates linked Q&A notes', () => {
     const directory = mkdtempSync(join(tmpdir(), 'research-notebook-source-test-'))
-    const database = new NotebookDatabase(join(directory, 'database.sqlite')); databases.push(database)
+    const database = new NotebookDatabase(join(directory, 'database.sqlite'))
+    databases.push(database)
     const service = new NotebookService(database, join(directory, 'assets'))
-    const notebook = service.createNotebook('Research'); const page = service.createPage(notebook.id, 'Paper'); const note = service.createNote(page.id, 'Captures')
-    const pdf = join(directory, 'paper.pdf'); writeFileSync(pdf, Buffer.from('%PDF-1.4'))
+    const notebook = service.createNotebook('Research')
+    const page = service.createPage(notebook.id, 'Paper')
+    const note = service.createNote(page.id, 'Captures')
+    const pdf = join(directory, 'paper.pdf')
+    writeFileSync(pdf, Buffer.from('%PDF-1.4'))
     const source = service.importPdf(notebook.id, pdf)
     const captured = service.captureSourceText(note.id, source.id, 12, 3, 'A selected finding.')
-    expect(service.getBlockSource(captured.id)).toMatchObject({ sourceDocumentId: source.id, pdfPage: 12, printedPage: 3, extractedText: 'A selected finding.' })
-    const region = service.captureSourceRegion(note.id, source.id, 12, { x: 10, y: 20, width: 30, height: 40 }, 'data:image/png;base64,iVBORw0KGgo=')
-    expect(service.getBlockSource(region.id)).toMatchObject({ selectionType: 'region', pdfPage: 12, bounds: { x: 10, y: 20, width: 30, height: 40 } })
+    expect(service.getBlockSource(captured.id)).toMatchObject({
+      sourceDocumentId: source.id,
+      pdfPage: 12,
+      printedPage: 3,
+      extractedText: 'A selected finding.'
+    })
+    const region = service.captureSourceRegion(
+      note.id,
+      source.id,
+      12,
+      { x: 10, y: 20, width: 30, height: 40 },
+      'data:image/png;base64,iVBORw0KGgo='
+    )
+    expect(service.getBlockSource(region.id)).toMatchObject({
+      selectionType: 'region',
+      pdfPage: 12,
+      bounds: { x: 10, y: 20, width: 30, height: 40 }
+    })
     const qa = service.createQaNote(page.id, source.id, 13, undefined, 'What does this imply?')
     const qaBlocks = service.getPageWorkspace(page.id).notes.find(({ id }) => id === qa.id)?.blocks ?? []
     expect(qaBlocks.map(({ type }) => type)).toEqual(['question', 'answer'])
     expect(service.getBlockSource(qaBlocks[0].id)?.pdfPage).toBe(13)
-    database.close(); databases.pop(); rmSync(directory, { recursive: true, force: true })
+    database.close()
+    databases.pop()
+    rmSync(directory, { recursive: true, force: true })
   })
 
   it('persists a 16 kHz WAV recording as an audio block and exports a lossless backup', () => {
     const directory = mkdtempSync(join(tmpdir(), 'research-notebook-audio-test-'))
-    const database = new NotebookDatabase(join(directory, 'database.sqlite')); databases.push(database)
+    const database = new NotebookDatabase(join(directory, 'database.sqlite'))
+    databases.push(database)
     const service = new NotebookService(database, join(directory, 'assets'), join(directory, 'config'))
-    const notebook = service.createNotebook('Arabic interview'); const page = service.createPage(notebook.id, 'Session'); const note = service.createNote(page.id, 'Recording')
-    const wav = Buffer.alloc(44 + 3200); wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(3200, 40)
+    const notebook = service.createNotebook('Arabic interview')
+    const page = service.createPage(notebook.id, 'Session')
+    const note = service.createNote(page.id, 'Recording')
+    const wav = Buffer.alloc(44 + 3200)
+    wav.write('RIFF', 0)
+    wav.writeUInt32LE(wav.length - 8, 4)
+    wav.write('WAVEfmt ', 8)
+    wav.writeUInt32LE(16, 16)
+    wav.writeUInt16LE(1, 20)
+    wav.writeUInt16LE(1, 22)
+    wav.writeUInt32LE(16000, 24)
+    wav.writeUInt32LE(32000, 28)
+    wav.writeUInt16LE(2, 32)
+    wav.writeUInt16LE(16, 34)
+    wav.write('data', 36)
+    wav.writeUInt32LE(3200, 40)
     const audio = service.saveRecording(note.id, wav.toString('base64'))
-    expect(audio.type).toBe('audio'); expect(audio.data.durationMs).toBe(100)
-    const destination = join(directory, 'exports'); writeFileSync(join(directory, 'placeholder'), '')
+    expect(audio.type).toBe('audio')
+    expect(audio.data.durationMs).toBe(100)
+    const destination = join(directory, 'exports')
+    writeFileSync(join(directory, 'placeholder'), '')
     const result = service.export({ type: 'notebook', notebookId: notebook.id }, 'lossless-json', destination)
     expect(result.manifestPath).toContain('manifest.json')
     const assetId = String(audio.data.assetId)
     expect(() => service.removeAsset(assetId)).toThrow('export record')
     expect(database.connection.prepare('SELECT transcript_text FROM transcription_runs').all()).toEqual([])
-    database.close(); databases.pop(); rmSync(directory, { recursive: true, force: true })
+    database.close()
+    databases.pop()
+    rmSync(directory, { recursive: true, force: true })
   })
 
   it('imports only fully validated archives and leaves no staged data after rejection', () => {
     const directory = mkdtempSync(join(tmpdir(), 'research-notebook-import-test-'))
-    const sourceDb = new NotebookDatabase(join(directory, 'source.sqlite')); databases.push(sourceDb)
+    const sourceDb = new NotebookDatabase(join(directory, 'source.sqlite'))
+    databases.push(sourceDb)
     const source = new NotebookService(sourceDb, join(directory, 'source-assets'))
-    const notebook = source.createNotebook('Portable'); const page = source.createPage(notebook.id, 'Page'); const note = source.createNote(page.id, 'Note')
-    const image = join(directory, 'image.png'); writeFileSync(image, Buffer.from('fixture-bytes'))
-    const asset = source.importAsset(notebook.id, 'image', image); source.attachAsset(note.id, asset.id, 'image')
-    const exported = source.export({ type: 'notebook', notebookId: notebook.id }, 'lossless-json', join(directory, 'exports'))
+    const notebook = source.createNotebook('Portable')
+    const page = source.createPage(notebook.id, 'Page')
+    const note = source.createNote(page.id, 'Note')
+    const image = join(directory, 'image.png')
+    writeFileSync(image, Buffer.from('fixture-bytes'))
+    const asset = source.importAsset(notebook.id, 'image', image)
+    source.attachAsset(note.id, asset.id, 'image')
+    const exported = source.export(
+      { type: 'notebook', notebookId: notebook.id },
+      'lossless-json',
+      join(directory, 'exports')
+    )
     const archivePath = join(dirname(exported.manifestPath), 'notebook.lossless.v1.json')
-    const targetDb = new NotebookDatabase(join(directory, 'target.sqlite')); databases.push(targetDb)
-    const targetAssets = join(directory, 'target-assets'); const target = new NotebookService(targetDb, targetAssets)
+    const targetDb = new NotebookDatabase(join(directory, 'target.sqlite'))
+    databases.push(targetDb)
+    const targetAssets = join(directory, 'target-assets')
+    const target = new NotebookService(targetDb, targetAssets)
     expect(target.importLossless(archivePath).importedAssets).toBe(1)
     expect(target.listNotebooks()).toHaveLength(1)
 
     const invalid = JSON.parse(readFileSync(archivePath, 'utf8')) as Record<string, any>
     invalid.assets[0].sha256 = '0'.repeat(64)
-    const invalidPath = join(directory, 'invalid.lossless.json'); writeFileSync(invalidPath, JSON.stringify(invalid))
+    const invalidPath = join(directory, 'invalid.lossless.json')
+    writeFileSync(invalidPath, JSON.stringify(invalid))
     expect(() => target.importLossless(invalidPath)).toThrow('integrity')
     expect(target.listNotebooks()).toHaveLength(1)
     expect(() => readdirSync(targetAssets).filter((name) => name.includes('.import-'))).not.toThrow()
     expect(readdirSync(targetAssets).filter((name) => name.includes('.import-'))).toEqual([])
-    sourceDb.close(); targetDb.close(); databases.splice(databases.indexOf(sourceDb), 1); databases.splice(databases.indexOf(targetDb), 1); rmSync(directory, { recursive: true, force: true })
+    sourceDb.close()
+    targetDb.close()
+    databases.splice(databases.indexOf(sourceDb), 1)
+    databases.splice(databases.indexOf(targetDb), 1)
+    rmSync(directory, { recursive: true, force: true })
   })
 })
