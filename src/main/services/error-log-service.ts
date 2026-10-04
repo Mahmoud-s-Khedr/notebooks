@@ -54,7 +54,12 @@ function eventFrom(row: StoredRow): ErrorEvent {
 
 /** The sole persistent error writer. Its failures are intentionally swallowed. */
 export class ErrorLogService {
-  constructor(private readonly db: Database.Database, private readonly fallbackPath: string, private readonly appVersion: string | null, private readonly retainAll: boolean) { this.importFallback() }
+  private releaseCount = 0
+
+  constructor(private readonly db: Database.Database, private readonly fallbackPath: string, private readonly appVersion: string | null, private readonly retainAll: boolean) {
+    if (!retainAll) this.releaseCount = (db.prepare('SELECT COUNT(*) AS count FROM error_events').get() as { count: number }).count
+    this.importFallback()
+  }
 
   record(error: unknown, input: ErrorLogInput): void {
     const detail = details(error)
@@ -95,7 +100,13 @@ export class ErrorLogService {
   private write(event: ErrorEvent): void {
     try {
       this.db.prepare('INSERT INTO error_events (id,created_at,severity,process,layer,category,code,message,stack,cause_chain,context_json,app_version,operation_id,ipc_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(event.id, event.createdAt, event.severity, event.process, event.layer, event.category, event.code, event.message, event.stack, event.causeChain, JSON.stringify(event.context), event.appVersion, event.operationId, event.ipcId)
-      if (!this.retainAll) this.db.prepare('DELETE FROM error_events WHERE id NOT IN (SELECT id FROM error_events ORDER BY created_at DESC, rowid DESC LIMIT 5000)').run()
+      if (!this.retainAll) {
+        this.releaseCount += 1
+        if (this.releaseCount > 5000) {
+          this.db.prepare('DELETE FROM error_events WHERE id NOT IN (SELECT id FROM error_events ORDER BY created_at DESC, rowid DESC LIMIT 5000)').run()
+          this.releaseCount = 5000
+        }
+      }
     } catch { appendFallbackEvent(this.fallbackPath, event) }
   }
 
