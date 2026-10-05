@@ -15,6 +15,12 @@ The application currently supports a real, restart-safe flow:
 
 Run it with `npm install` followed by `npm run dev`.
 
+## Tester manual
+
+Read the illustrated [Markdown manual](docs/user-guide.md), open the self-contained [HTML guide](docs/user-guide.html), or print the [PDF guide](docs/user-guide.pdf). The guide covers the current 0.1.0 desktop UI and identifies features that need a runtime, credential, or platform-specific verification.
+
+The [coverage checklist](docs/guide-coverage.md) records exercised workflows and remaining checks. [Capture and build instructions](docs/guide-maintenance.md) explain how to update the screenshots and regenerate both shareable formats.
+
 ## Technical assessment and direction
 
 ### Architecture
@@ -27,7 +33,7 @@ The next major boundaries should remain small services: `NotebookService`, `Sour
 
 `notebooks → pages → notes → blocks` is represented by foreign-keyed, ordered tables. Every entity has a UUID and timestamps. Blocks keep their type, JSON data, JSON metadata, and per-note position, making new block types additive rather than schema-breaking.
 
-The initial migration also establishes separate `source_documents`, `block_sources`, `block_relations`, and `assets` tables. These are deliberately unused by the first UI slice but prevent provenance, relationships, and files from becoming ad-hoc text conventions later.
+The migration catalogue also establishes separate `source_documents`, `block_sources`, `block_relations`, and `assets` tables. These support provenance, relationships and managed assets, preventing provenance, relationships, and files from becoming ad-hoc text conventions later.
 
 ### SQLite and data safety
 
@@ -51,7 +57,7 @@ Assets should live beside the database, under managed `assets/images`, `assets/s
 
 ### Block, source, and provenance model
 
-The block type union already covers the planned initial types. Future blocks use typed data payloads while retaining generic metadata. `block_relations` represents links such as `responds_to` or `explains` without special-case tables. `block_sources` structurally records source document, selection type, PDF and printed page, bounds, and extracted text, enabling a future `SourceViewer` to navigate to the original material.
+The block type union already covers the planned initial types. Future blocks use typed data payloads while retaining generic metadata. `block_relations` represents links such as `responds_to` or `explains` without special-case tables. `block_sources` structurally records source document, selection type, PDF and printed page, bounds, and extracted text, allowing the PDF viewer to navigate to the original source and physical/printed page.
 
 ### Export and STT direction
 
@@ -71,3 +77,17 @@ Exports should be independent renderers over one canonical notebook read model: 
 ## Verification
 
 `npm test` verifies that a real SQLite file survives a close/reopen cycle and that block reordering is atomic. The pre/post test hooks switch the native SQLite module to Node's ABI for Vitest and back to Electron's ABI for the desktop app.
+
+### Save, navigation and migration boundaries
+
+The renderer’s application-owned `SaveCoordinator` waits for dirty editor fields and a single recording save before page/note/mode transitions or closure. Recordings retain their original destination and WAV after failure; Retry save reuses a correlated operation ID. The service commits the asset/block/reference graph transactionally and deduplicates retries using existing block metadata, without a schema or archive-format change.
+
+Normal close/quit/restart uses narrowly typed preload messages and a main-process request ID. Main validates the sender and frame, waits for a successful renderer save, then cancels/drains background writes before closing SQLite. A failed save cancels closure. Forced process termination remains outside recovery support.
+
+Library moves establish a service write barrier before queueing. Outstanding jobs must finish or be cancelled first. Copying and pending-restart states reject content/settings/import/new-job mutations. Restart validates and activates the bootstrap destination; original removal checks the authoritative pointer again. The persistent banner explains the restriction and offers Restart now.
+
+PDF Text/Region modes use PDF.js’s text layer and page-scoped extraction cache. Explicit source-navigation state carries provenance from Write into Research. Workspace request correlation preserves loaded batches/selection and ignores stale results. Attachments load near the viewport; images request cached previews and offer Load original image.
+
+### Regression and performance verification
+
+Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build`. After installing the scoped guide dependencies, run `node scripts/guide/reliability.mjs` for isolated Linux Electron workflows and `npm run benchmark:scenarios` for five-run medians. See [issue resolutions](docs/issue-resolutions.md), [workflow verification](docs/workflow-verification.json), and [performance budgets/results](docs/performance-budgets.md). The [editable guide](docs/user-guide.md), [offline HTML](docs/user-guide.html), and [printable PDF](docs/user-guide.pdf) share one source; original captures and overlays remain versioned.

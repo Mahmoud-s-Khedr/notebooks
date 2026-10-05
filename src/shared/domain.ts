@@ -183,7 +183,7 @@ export interface StorageSummary {
   migration: LibraryMigrationStatus
 }
 export interface LibraryMigrationStatus {
-  state: 'idle' | 'copying' | 'pending-restart' | 'active' | 'failed'
+  state: 'idle' | 'queued' | 'copying' | 'pending-restart' | 'active' | 'failed'
   destination: string | null
   error: string | null
 }
@@ -288,6 +288,11 @@ export interface PageWorkspace extends Page {
 }
 
 export interface ResearchNotebookApi {
+  lifecycle: {
+    onCloseRequest(handler: (requestId: string) => Promise<void>): () => void
+    closeResult(input: { requestId: string; saved: boolean }): void
+    restart(): Promise<void>
+  }
   notebooks: {
     list(): Promise<NotebookTree[]>
     create(input: { title: string }): Promise<Notebook>
@@ -317,7 +322,7 @@ export interface ResearchNotebookApi {
     attach(input: { noteId: string; assetId: string; type: 'image' | 'screenshot' | 'audio' | 'file' }): Promise<Block>
     diagnostics(input: { notebookId: string }): Promise<AssetDiagnostics>
     remove(input: { assetId: string }): Promise<void>
-    saveRecording(input: { noteId: string; wavBase64: string; filename?: string }): Promise<Block>
+    saveRecording(input: { noteId: string; wavBase64: string; filename?: string; operationId?: string }): Promise<Block>
     requestThumbnail(input: { assetId: string; width: number; height: number }): Promise<Job>
     thumbnailDataUrl(input: { assetId: string; width: number; height: number }): Promise<string | null>
   }
@@ -343,7 +348,7 @@ export interface ResearchNotebookApi {
     cancelModelDownload(input: { modelId: string }): Promise<void>
     removeModel(input: { modelId: string }): Promise<void>
     setDefaultModel(input: { modelId: string }): Promise<void>
-    storage(): Promise<StorageSummary>
+    storage(input?: { refresh?: boolean }): Promise<StorageSummary>
     moveLibrary(): Promise<Job | null>
     migrationStatus(): Promise<LibraryMigrationStatus>
     removeOldLibrary(): Promise<void>

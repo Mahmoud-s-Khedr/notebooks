@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { PdfRenderer } from './pdf-renderer'
 
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const now = () => new Date().toISOString()
 
 /** Main-process-only thumbnail cache. The renderer is handed data URLs, never paths. */
@@ -65,7 +65,15 @@ export class ThumbnailService {
         : (() => {
             const image = nativeImage.createFromPath(this.assetPath(asset.relative_path))
             if (image.isEmpty()) throw new Error('The image could not be decoded for thumbnailing.')
-            return image.resize({ width, height, quality: 'good' }).toPNG()
+            const original = image.getSize()
+            const scale = Math.min(1, width / original.width, height / original.height)
+            return image
+              .resize({
+                width: Math.max(1, Math.round(original.width * scale)),
+                height: Math.max(1, Math.round(original.height * scale)),
+                quality: 'good'
+              })
+              .toPNG()
           })()
     if (cancelled()) throw new Error('Cancelled')
     const relative = `${assetId}-${asset.sha256.slice(0, 12)}-${CACHE_VERSION}-${width}x${height}.png`

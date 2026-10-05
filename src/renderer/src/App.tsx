@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import type {
+  BlockSource,
   AppPreferences,
   ErrorEvent,
   ErrorProcess,
@@ -25,7 +26,9 @@ import type {
   WhisperModel
 } from '../../shared/domain'
 import { Button, DropdownMenu, IconTip, Input, Modal } from './components/ui'
-import { PageWorkspace as EditorWorkspace } from './features/editor/PageWorkspace'
+import { bytes } from './format-bytes'
+import { SaveContext, SaveCoordinator, useSaves } from './save-coordinator'
+import { AudioRecorder, PageWorkspace as EditorWorkspace } from './features/editor/PageWorkspace'
 import { SourceWorkspace } from './features/sources/SourceWorkspace'
 
 const errorMessage = (error: unknown): string =>
@@ -37,6 +40,15 @@ const applyAppearance = (preferences: AppPreferences) => {
 }
 
 export function App(): ReactElement {
+  const [saves] = useState(() => new SaveCoordinator())
+  const [sourceNavigation, setSourceNavigation] = useState<BlockSource | null>(null)
+  const workspaceRef = useRef<PageWorkspace | null>(null)
+  const pageRef = useRef<string | null>(null)
+  const request = useRef(0)
+  const [migration, setMigration] = useState('idle')
+  const [searchState, setSearchState] = useState('initial')
+  const searchRequest = useRef(0)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [notebooks, setNotebooks] = useState<NotebookTree[]>([])
   const [workspace, setWorkspace] = useState<PageWorkspace | null>(null)
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null)
@@ -49,31 +61,92 @@ export function App(): ReactElement {
   const [utility, setUtility] = useState<Utility>(null)
   const [trash, setTrash] = useState<TrashRecord[]>([])
   const [error, setError] = useState<string | null>(null)
+  const handleError = useCallback((value: unknown) => setError(errorMessage(value)), [])
+  const activeNoteRef = useRef<string | null>(null)
+  useEffect(() => {
+    activeNoteRef.current = activeNoteId
+  }, [activeNoteId])
   const searchInput = useRef<HTMLInputElement>(null)
   const refreshTree = useCallback(async () => setNotebooks(await window.researchNotebook.notebooks.list()), [])
   const refreshTrash = useCallback(async () => setTrash(await window.researchNotebook.trash.list()), [])
-  const openPage = useCallback(async (pageId: string, cursor?: string) => {
-    setError(null)
-    setSelectedPageId(pageId)
-    setActiveNoteId(null)
-    setWorkspace(await window.researchNotebook.pages.getWorkspace({ pageId, cursor }))
-  }, [])
-  const reloadWorkspace = useCallback(async () => {
-    if (selectedPageId) {
-      setWorkspace(await window.researchNotebook.pages.getWorkspace({ pageId: selectedPageId }))
-      setActiveNoteId(null)
-    }
-  }, [selectedPageId])
-  const trashChanged = useCallback(async () => {
-    await Promise.all([refreshTree(), refreshTrash()])
-    if (selectedPageId)
+  const openPage = useCallback(
+    async (pageId: string, cursor?: string) => {
+      await saves.flush()
+      const token = ++request.current
+      let next: PageWorkspace
       try {
-        await reloadWorkspace()
-      } catch {
-        setWorkspace(null)
-        setSelectedPageId(null)
+        next = await window.researchNotebook.pages.getWorkspace({ pageId, cursor })
+      } catch (error) {
+        if (token !== request.current) return
+        throw error
       }
-  }, [refreshTree, refreshTrash, reloadWorkspace, selectedPageId])
+      if (token !== request.current) return
+      pageRef.current = pageId
+      workspaceRef.current = next
+      setSelectedPageId(pageId)
+      activeNoteRef.current = next.notes[0]?.id ?? null
+      setActiveNoteId(activeNoteRef.current)
+      setWorkspace(next)
+      setError(null)
+    },
+    [saves]
+  )
+  const reloadWorkspace = useCallback(async (activateId?: string) => {
+    const pageId = pageRef.current
+    if (!pageId) return
+    const token = ++request.current
+    const previous = workspaceRef.current
+    const obsolete = () => token !== request.current || pageRef.current !== pageId
+    const read = async (cursor?: string) => {
+      try {
+        return await window.researchNotebook.pages.getWorkspace({ pageId, cursor })
+      } catch (error) {
+        if (obsolete()) return null
+        throw error
+      }
+    }
+    let next = await read()
+    if (!next || obsolete()) return
+    const notes = [...next.notes]
+    const target = activateId ?? activeNoteRef.current
+    const loadedTail = () =>
+      Math.max(previous?.notes.at(-1)?.position ?? -1, workspaceRef.current?.notes.at(-1)?.position ?? -1)
+    while (
+      next.nextCursor &&
+      ((notes.at(-1)?.position ?? -1) < loadedTail() || (target && !notes.some((n) => n.id === target)))
+    ) {
+      next = await read(next.nextCursor)
+      if (!next || obsolete()) return
+      notes.push(...next.notes)
+    }
+    if (obsolete()) return
+    const selected = activateId ?? activeNoteRef.current
+    const previousPosition = previous?.notes.find((n) => n.id === selected)?.position ?? 0
+    const nextSelection = notes.some((n) => n.id === selected)
+      ? selected
+      : (notes.find((n) => n.position >= previousPosition)?.id ?? notes.at(-1)?.id ?? null)
+    const merged = { ...next, notes }
+    workspaceRef.current = merged
+    setWorkspace(merged)
+    activeNoteRef.current = nextSelection
+    setActiveNoteId(nextSelection)
+  }, [])
+  const trashChanged = useCallback(async () => {
+    const tree = await window.researchNotebook.notebooks.list()
+    setNotebooks(tree)
+    await refreshTrash()
+    if (selectedPageId && !tree.some((n) => n.pages.some((p) => p.id === selectedPageId))) {
+      ++request.current
+      pageRef.current = null
+      workspaceRef.current = null
+      setSelectedPageId(null)
+      setWorkspace(null)
+      activeNoteRef.current = null
+      setActiveNoteId(null)
+      return
+    }
+    if (selectedPageId) await reloadWorkspace()
+  }, [refreshTrash, reloadWorkspace, selectedPageId])
   useEffect(() => {
     void refreshTree().catch((error: unknown) => setError(errorMessage(error)))
   }, [refreshTree])
@@ -92,22 +165,72 @@ export function App(): ReactElement {
       }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'n' && workspace) {
         event.preventDefault()
-        void window.researchNotebook.notes
-          .create({ pageId: workspace.id, title: 'Untitled note' })
-          .then(reloadWorkspace)
+        void saves
+          .flush()
+          .then(() => window.researchNotebook.notes.create({ pageId: workspace.id, title: 'Untitled note' }))
+          .then((note) => reloadWorkspace(note.id))
           .catch((error: unknown) => setError(errorMessage(error)))
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [workspace, reloadWorkspace])
+  }, [workspace, reloadWorkspace, saves])
   const search = async (value = query) => {
-    try {
-      setResults(value.trim() ? await window.researchNotebook.search({ query: value }) : [])
-    } catch (error) {
-      setError(errorMessage(error))
-    }
+    const token = ++searchRequest.current
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    setSearchState(value.trim() ? 'searching' : 'initial')
+    setResults([])
+    if (!value.trim()) return
+    searchTimer.current = setTimeout(() => {
+      void window.researchNotebook
+        .search({ query: value })
+        .then((next) => {
+          if (token !== searchRequest.current) return
+          setResults(next)
+          setSearchState(next.length ? 'matches' : 'empty')
+        })
+        .catch(() => {
+          if (token === searchRequest.current) setSearchState('error')
+        })
+    }, 150)
   }
+  const transition = (action: () => void) => {
+    void saves
+      .flush()
+      .then(action)
+      .catch((value) => setError(errorMessage(value)))
+  }
+  useEffect(() => {
+    const api = window.researchNotebook.lifecycle
+    if (!api) return
+    return api.onCloseRequest(async (requestId) => {
+      try {
+        await saves.flush()
+        api.closeResult({ requestId, saved: true })
+      } catch (value) {
+        setError(errorMessage(value))
+        api.closeResult({ requestId, saved: false })
+      }
+    })
+  }, [saves])
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      void window.researchNotebook.settings
+        .migrationStatus()
+        .then((status) => {
+          if (alive) setMigration(status.state)
+        })
+        .catch((value) => {
+          if (alive) setError(errorMessage(value))
+        })
+    poll()
+    const timer = ['queued', 'copying'].includes(migration) ? setInterval(poll, 1200) : null
+    return () => {
+      alive = false
+      if (timer) clearInterval(timer)
+    }
+  }, [migration])
   const selectResult = async (result: SearchResult) => {
     try {
       if (result.pageId)
@@ -145,8 +268,16 @@ export function App(): ReactElement {
         setError(errorMessage(error))
         return
       }
+    await saves.flush()
     setUtility(kind)
   }
+  const noteRenamed = useCallback((id: string, title: string) => {
+    const current = workspaceRef.current
+    if (!current || !current.notes.some((n) => n.id === id)) return
+    const next = { ...current, notes: current.notes.map((n) => (n.id === id ? { ...n, title } : n)) }
+    workspaceRef.current = next
+    setWorkspace(next)
+  }, [])
   const editor = workspace && (
     <EditorWorkspace
       workspace={workspace}
@@ -159,144 +290,204 @@ export function App(): ReactElement {
           pageId: workspace.id,
           cursor: workspace.nextCursor
         })
-        setWorkspace({ ...next, notes: [...workspace.notes, ...next.notes] })
+        if (pageRef.current !== workspace.id || workspaceRef.current !== workspace) return
+        const merged = { ...next, notes: [...workspace.notes, ...next.notes] }
+        workspaceRef.current = merged
+        setWorkspace(merged)
       }}
       activeNoteId={activeNoteId}
-      setActiveNoteId={setActiveNoteId}
-      onError={(error) => setError(errorMessage(error))}
+      setActiveNoteId={(id) => {
+        if (id !== activeNoteId)
+          transition(() => {
+            activeNoteRef.current = id
+            setActiveNoteId(id)
+          })
+      }}
+      onError={handleError}
       onChanged={refreshTree}
+      onNoteRenamed={noteRenamed}
       onTrashed={trashChanged}
-      onViewSource={() => setMode('research')}
+      onViewSource={(source) =>
+        transition(() => {
+          setSourceNavigation(source)
+          setMode('research')
+        })
+      }
       onUtilities={openUtility}
     />
   )
   return (
-    <main className={`app-shell ${mode}-mode ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      {!sidebarCollapsed && (
-        <NotebookSidebar
-          notebooks={notebooks}
-          selectedPageId={selectedPageId}
-          onOpenPage={openPage}
-          onRefresh={refreshTree}
-          onError={(error) => setError(errorMessage(error))}
-          onTrashed={trashChanged}
-          onNewNotebook={createNotebook}
-        />
-      )}
-      <section className="application-main">
-        <header className="app-toolbar">
-          {sidebarCollapsed ? (
-            <IconTip label="Expand sidebar">
-              <Button variant="icon" aria-label="Expand notebook sidebar" onClick={() => setSidebarCollapsed(false)}>
-                <PanelLeftOpen size={18} />
-              </Button>
-            </IconTip>
-          ) : (
-            <IconTip label="Collapse sidebar">
-              <Button variant="icon" aria-label="Collapse notebook sidebar" onClick={() => setSidebarCollapsed(true)}>
-                <PanelLeftClose size={18} />
-              </Button>
-            </IconTip>
+    <SaveContext.Provider value={saves}>
+      <main className={`app-shell ${mode}-mode ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        {migration === 'pending-restart' && (
+          <div className="migration-banner" role="status">
+            Library move verified. Editing is paused until restart activates the destination.{' '}
+            <Button onClick={() => void window.researchNotebook.lifecycle.restart()}>Restart now</Button>
+          </div>
+        )}
+        {(migration === 'copying' || migration === 'queued') && (
+          <div className="migration-banner" role="status">
+            Moving library. Editing is paused.
+          </div>
+        )}
+        <fieldset className="app-content" disabled={['queued', 'copying', 'pending-restart'].includes(migration)}>
+          {!sidebarCollapsed && (
+            <NotebookSidebar
+              notebooks={notebooks}
+              selectedPageId={selectedPageId}
+              onOpenPage={openPage}
+              onRefresh={refreshTree}
+              onError={handleError}
+              onTrashed={trashChanged}
+              onNewNotebook={createNotebook}
+            />
           )}
-          <button className="command-search" onClick={() => setPaletteOpen(true)}>
-            <Search size={17} />
-            <span>Search notes, sources, or ask…</span>
-            <kbd>⌘ K</kbd>
-          </button>
-          <div className="workspace-switcher" aria-label="Workspace mode">
-            <button
-              className={mode === 'research' ? 'selected' : ''}
-              aria-pressed={mode === 'research'}
-              onClick={() => setMode('research')}
-            >
-              <BookOpen size={15} /> Research
-            </button>
-            <button
-              className={mode === 'write' ? 'selected' : ''}
-              aria-pressed={mode === 'write'}
-              onClick={() => setMode('write')}
-            >
-              Write
-            </button>
-          </div>
-          <AppMenu
-            openUtility={openUtility}
-            reloadWorkspace={reloadWorkspace}
-            onError={(error) => setError(errorMessage(error))}
+          <section className="application-main">
+            <header className="app-toolbar">
+              {sidebarCollapsed ? (
+                <IconTip label="Expand sidebar">
+                  <Button
+                    variant="icon"
+                    aria-label="Expand notebook sidebar"
+                    onClick={() => setSidebarCollapsed(false)}
+                  >
+                    <PanelLeftOpen size={18} />
+                  </Button>
+                </IconTip>
+              ) : (
+                <IconTip label="Collapse sidebar">
+                  <Button
+                    variant="icon"
+                    aria-label="Collapse notebook sidebar"
+                    onClick={() => setSidebarCollapsed(true)}
+                  >
+                    <PanelLeftClose size={18} />
+                  </Button>
+                </IconTip>
+              )}
+              <button className="command-search" onClick={() => setPaletteOpen(true)}>
+                <Search size={17} />
+                <span>Search pages, notes, and blocks…</span>
+                <kbd>{navigator.platform.includes('Mac') ? '⌘ K' : 'Ctrl K'}</kbd>
+              </button>
+              <div className="workspace-switcher" aria-label="Workspace mode">
+                <button
+                  className={mode === 'research' ? 'selected' : ''}
+                  aria-pressed={mode === 'research'}
+                  onClick={() => transition(() => setMode('research'))}
+                >
+                  <BookOpen size={15} /> Research
+                </button>
+                <button
+                  className={mode === 'write' ? 'selected' : ''}
+                  aria-pressed={mode === 'write'}
+                  onClick={() => transition(() => setMode('write'))}
+                >
+                  Write
+                </button>
+              </div>
+              <AppMenu
+                openUtility={openUtility}
+                reloadWorkspace={async () => {
+                  const tree = await window.researchNotebook.notebooks.list()
+                  setNotebooks(tree)
+                  return tree
+                }}
+                beforeImport={() => saves.flush()}
+                openPage={openPage}
+                onError={handleError}
+              />
+            </header>
+            <AudioRecorder
+              noteId={activeNoteId}
+              onSaved={reloadWorkspace}
+              onError={(value) => setError(errorMessage(value))}
+            />
+            {error && (
+              <div className="error" role="alert">
+                {error}
+                <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            )}
+            {utility === 'settings' ? (
+              <SettingsPage
+                notebookId={notebookId}
+                onClose={() => transition(() => setUtility(null))}
+                beforeMove={async () => {
+                  await saves.flush()
+                  const job = await window.researchNotebook.settings.moveLibrary()
+                  if (job) setMigration('copying')
+                }}
+                onError={handleError}
+              />
+            ) : workspace ? (
+              mode === 'research' ? (
+                <Group className="research-layout" orientation="horizontal">
+                  <Panel id="source" defaultSize="42" minSize="30" maxSize="55">
+                    <section className="source-pane">
+                      <SourceWorkspace
+                        navigation={sourceNavigation}
+                        notebookId={notebookId}
+                        workspace={workspace}
+                        activeNoteId={activeNoteId}
+                        onSaved={reloadWorkspace}
+                        onError={handleError}
+                        onUtilities={openUtility}
+                      />
+                    </section>
+                  </Panel>
+                  <Separator className="pane-resize" />
+                  <Panel id="editor" minSize="45">
+                    <section className="editor-pane">{editor}</section>
+                  </Panel>
+                </Group>
+              ) : (
+                <div className="write-layout">{editor}</div>
+              )
+            ) : (
+              <Empty onNewNotebook={createNotebook} />
+            )}
+          </section>
+          <CommandPalette
+            open={paletteOpen}
+            onOpenChange={setPaletteOpen}
+            query={query}
+            setQuery={setQuery}
+            results={results}
+            searchState={searchState}
+            onSearch={search}
+            onSelect={selectResult}
+            inputRef={searchInput}
           />
-        </header>
-        {error && (
-          <div className="error" role="alert">
-            {error}
-            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-              Dismiss
-            </Button>
-          </div>
-        )}
-        {utility === 'settings' ? (
-          <SettingsPage
+          <UtilityDialogs
+            utility={utility}
+            onOpenChange={(open) => !open && setUtility(null)}
             notebookId={notebookId}
-            onClose={() => setUtility(null)}
-            onError={(value) => setError(errorMessage(value))}
+            workspace={workspace}
+            activeNoteId={activeNoteId}
+            trash={trash}
+            onChanged={trashChanged}
+            onError={handleError}
           />
-        ) : workspace ? (
-          mode === 'research' ? (
-            <Group className="research-layout" orientation="horizontal">
-              <Panel id="source" defaultSize="42" minSize="30" maxSize="55">
-                <section className="source-pane">
-                  <SourceWorkspace
-                    notebookId={notebookId}
-                    workspace={workspace}
-                    activeNoteId={activeNoteId}
-                    onSaved={reloadWorkspace}
-                    onError={(error) => setError(errorMessage(error))}
-                    onUtilities={openUtility}
-                  />
-                </section>
-              </Panel>
-              <Separator className="pane-resize" />
-              <Panel id="editor" minSize="45">
-                <section className="editor-pane">{editor}</section>
-              </Panel>
-            </Group>
-          ) : (
-            <div className="write-layout">{editor}</div>
-          )
-        ) : (
-          <Empty onNewNotebook={createNotebook} />
-        )}
-      </section>
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        query={query}
-        setQuery={setQuery}
-        results={results}
-        onSearch={search}
-        onSelect={selectResult}
-        inputRef={searchInput}
-      />
-      <UtilityDialogs
-        utility={utility}
-        onOpenChange={(open) => !open && setUtility(null)}
-        notebookId={notebookId}
-        workspace={workspace}
-        activeNoteId={activeNoteId}
-        trash={trash}
-        onChanged={trashChanged}
-        onError={(error) => setError(errorMessage(error))}
-      />
-    </main>
+        </fieldset>
+      </main>
+    </SaveContext.Provider>
   )
 }
 
 function AppMenu({
   openUtility,
   reloadWorkspace,
+  beforeImport,
+  openPage,
   onError
 }: {
   openUtility: (kind: Utility) => Promise<void>
-  reloadWorkspace: () => Promise<void>
+  reloadWorkspace: () => Promise<NotebookTree[]>
+  openPage: (id: string) => Promise<void>
+  beforeImport: () => Promise<void>
   onError: (error: unknown) => void
 }): ReactElement {
   return (
@@ -310,9 +501,19 @@ function AppMenu({
         <DropdownMenu.Content className="menu-content" align="end">
           <DropdownMenu.Item
             className="menu-item"
-            onSelect={() => void window.researchNotebook.imports.start().then(reloadWorkspace).catch(onError)}
+            onSelect={() =>
+              void beforeImport()
+                .then(() => window.researchNotebook.imports.start())
+                .then(async (result) => {
+                  if (!result) return
+                  const tree = await reloadWorkspace()
+                  const imported = tree.find((n) => n.id === result.notebook.id)
+                  if (imported?.pages[0]) await openPage(imported.pages[0].id)
+                })
+                .catch(onError)
+            }
           >
-            Import backup
+            Import lossless archive…
           </DropdownMenu.Item>
           <DropdownMenu.Item
             className="menu-item"
@@ -349,7 +550,14 @@ function NotebookSidebar({
   onTrashed: () => Promise<void>
   onNewNotebook: () => Promise<void>
 }): ReactElement {
+  const saves = useSaves()
   const [newPage, setNewPage] = useState('')
+  const [filter, setFilter] = useState('')
+  const filtered = notebooks.flatMap((n) => {
+    const matches = n.title.toLowerCase().includes(filter.toLowerCase())
+    const pages = matches ? n.pages : n.pages.filter((p) => p.title.toLowerCase().includes(filter.toLowerCase()))
+    return matches || pages.length ? [{ ...n, pages }] : []
+  })
   const createPage = async (notebookId: string) => {
     try {
       const page = await window.researchNotebook.pages.create({ notebookId, title: newPage.trim() || 'Untitled page' })
@@ -368,14 +576,20 @@ function NotebookSidebar({
       </div>
       <div className="sidebar-search">
         <Search size={16} />
-        <input aria-label="Filter notebook pages" placeholder="Search notes…" />
-        <kbd>⌘ K</kbd>
+        <input
+          aria-label="Filter notebook and page titles"
+          placeholder="Filter notebooks and pages…"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        />
+        <kbd>{navigator.platform.includes('Mac') ? '⌘ K' : 'Ctrl K'}</kbd>
       </div>
       <div className="sidebar-label">
         MY NOTEBOOK <ChevronDown size={14} />
       </div>
       <nav>
-        {notebooks.map((notebook) => (
+        {!filtered.length && <p role="status">No matching notebooks or pages.</p>}
+        {filtered.map((notebook) => (
           <section className="notebook-tree" key={notebook.id}>
             <div className="tree-title">
               <FolderPlus size={14} />
@@ -393,8 +607,9 @@ function NotebookSidebar({
               <button
                 aria-label={`Move ${notebook.title} to trash`}
                 onClick={() =>
-                  void window.researchNotebook.trash
-                    .move({ entityType: 'notebook', id: notebook.id })
+                  void saves
+                    .flush()
+                    .then(() => window.researchNotebook.trash.move({ entityType: 'notebook', id: notebook.id }))
                     .then(onTrashed)
                     .catch(onError)
                 }
@@ -442,6 +657,7 @@ function CommandPalette({
   query,
   setQuery,
   results,
+  searchState,
   onSearch,
   onSelect,
   inputRef
@@ -451,6 +667,7 @@ function CommandPalette({
   query: string
   setQuery: (query: string) => void
   results: SearchResult[]
+  searchState: string
   onSearch: (query?: string) => Promise<void>
   onSelect: (result: SearchResult) => Promise<void>
   inputRef: React.RefObject<HTMLInputElement | null>
@@ -467,7 +684,7 @@ function CommandPalette({
               setQuery(event.target.value)
               void onSearch(event.target.value)
             }}
-            placeholder="Search notes, sources, or ask…"
+            placeholder="Search pages, notes, and blocks…"
           />
         </div>
         {results.length ? (
@@ -482,7 +699,15 @@ function CommandPalette({
             ))}
           </div>
         ) : (
-          <p className="palette-empty">Start typing to search pages, notes, and blocks.</p>
+          <p className="palette-empty">
+            {searchState === 'searching'
+              ? 'Searching…'
+              : searchState === 'empty'
+                ? 'No matches.'
+                : searchState === 'error'
+                  ? 'Search failed. Edit the query to retry.'
+                  : 'Start typing to search pages, notes, and blocks.'}
+          </p>
         )}
       </div>
     </Modal>
@@ -529,15 +754,13 @@ function UtilityDialogs({
     </>
   )
 }
-const bytes = (value: number) =>
-  value < 1_000_000
-    ? `${Math.round(value / 1000)} KB`
-    : `${(value / 1_000_000_000).toFixed(value > 1_000_000_000 ? 1 : 2)} GB`
 function SettingsPage({
+  beforeMove,
   notebookId,
   onClose,
   onError
 }: {
+  beforeMove: () => Promise<void>
   notebookId: string | null
   onClose: () => void
   onError: (error: unknown) => void
@@ -552,26 +775,27 @@ function SettingsPage({
   const [jobs, setJobs] = useState<Job[]>([])
   const [maintenance, setMaintenance] = useState('')
   const load = useCallback(async () => {
-    const [prefs, transcription, modelList, summary, jobList] = await Promise.all([
-      window.researchNotebook.settings.preferences(),
-      window.researchNotebook.settings.transcription(),
-      window.researchNotebook.settings.models(),
-      window.researchNotebook.settings.storage(),
-      window.researchNotebook.jobs.list()
-    ])
-    setPreferences(prefs)
-    applyAppearance(prefs)
-    setConfigured(transcription.openRouterConfigured)
-    setSelectedModel(transcription.selectedLocalModel?.id ?? null)
-    setModels(modelList)
-    setStorage(summary)
-    setJobs(jobList)
-  }, [])
+    if (section === 'general') {
+      const prefs = await window.researchNotebook.settings.preferences()
+      setPreferences(prefs)
+      applyAppearance(prefs)
+    } else if (section === 'transcription') {
+      const [transcription, modelList] = await Promise.all([
+        window.researchNotebook.settings.transcription(),
+        window.researchNotebook.settings.models()
+      ])
+      setConfigured(transcription.openRouterConfigured)
+      setSelectedModel(transcription.selectedLocalModel?.id ?? null)
+      setModels(modelList)
+    } else if (section === 'storage') setStorage(await window.researchNotebook.settings.storage({ refresh: true }))
+    else setJobs(await window.researchNotebook.jobs.list())
+  }, [section])
   useEffect(() => {
     void load().catch(onError)
+    if (section !== 'transcription' && section !== 'maintenance') return
     const timer = window.setInterval(() => void load().catch(onError), 1100)
     return () => window.clearInterval(timer)
-  }, [load, onError])
+  }, [load, onError, section])
   const savePreferences = async (input: Partial<AppPreferences>) => {
     try {
       const next = await window.researchNotebook.settings.updatePreferences(input)
@@ -783,6 +1007,9 @@ function SettingsPage({
           {section === 'storage' && (
             <section className="settings-section">
               <h2>Library &amp; Storage</h2>
+              <Button variant="secondary" onClick={() => void load().catch(onError)}>
+                Refresh storage
+              </Button>
               {storage && (
                 <>
                   <div className="settings-card">
@@ -811,11 +1038,7 @@ function SettingsPage({
                         Move verified. Restart the application to activate the new library.
                       </p>
                     ) : (
-                      <Button
-                        onClick={() => void window.researchNotebook.settings.moveLibrary().then(load).catch(onError)}
-                      >
-                        Move library…
-                      </Button>
+                      <Button onClick={() => void beforeMove().then(load).catch(onError)}>Move library…</Button>
                     )}
                     {storage.oldLibraryPath && (
                       <div className="old-library">
@@ -1154,6 +1377,7 @@ function TrashDialog({
   onChanged: () => Promise<void>
   onError: (error: unknown) => void
 }): ReactElement {
+  const [pending, setPending] = useState<TrashRecord | null>(null)
   return (
     <Modal title="Trash" open onOpenChange={onOpenChange}>
       <p className="dialog-copy">Restore items or permanently delete them.</p>
@@ -1183,16 +1407,7 @@ function TrashDialog({
               >
                 Restore
               </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() =>
-                  void window.researchNotebook.trash
-                    .permanentlyDelete({ entityType: record.entityType, id: record.id })
-                    .then(onChanged)
-                    .catch(onError)
-                }
-              >
+              <Button variant="danger" size="sm" onClick={() => setPending(record)}>
                 Delete
               </Button>
             </div>
@@ -1201,6 +1416,38 @@ function TrashDialog({
           <p className="dialog-copy">Trash is empty.</p>
         )}
       </div>
+      <Modal
+        defaultCancel
+        title="Permanently delete item?"
+        open={Boolean(pending)}
+        onOpenChange={(open) => {
+          if (!open) setPending(null)
+        }}
+      >
+        <p>
+          Delete “{pending?.title}” ({pending?.entityType}) and all descendants? This cannot be undone.
+        </p>
+        <div className="dialog-actions">
+          <Button data-default-cancel variant="secondary" onClick={() => setPending(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (!pending) return
+              void window.researchNotebook.trash
+                .permanentlyDelete({ entityType: pending.entityType, id: pending.id })
+                .then(async () => {
+                  setPending(null)
+                  await onChanged()
+                })
+                .catch(onError)
+            }}
+          >
+            Permanently delete
+          </Button>
+        </div>
+      </Modal>
     </Modal>
   )
 }

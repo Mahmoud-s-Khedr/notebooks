@@ -98,7 +98,7 @@ describe('App core notebook workflow', () => {
 
     await user.keyboard('{Control>}k{/Control}')
     expect(await screen.findByRole('dialog', { name: 'Search your notebook' })).toBeVisible()
-    expect(screen.getByPlaceholderText('Search notes, sources, or ask…')).toHaveFocus()
+    expect(screen.getByPlaceholderText('Search pages, notes, and blocks…')).toHaveFocus()
     await user.keyboard('{Escape}')
 
     await user.click(screen.getByRole('button', { name: 'Topic page' }))

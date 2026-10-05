@@ -13,6 +13,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "verify:sidecars": "node scripts/verify-whisper-sidecars.mjs",
+    "test:electron": "node scripts/guide/reliability.mjs",
+    "benchmark:compare": "node scripts/perf-compare.mjs",
     "benchmark:scenarios": "node scripts/perf-scenarios.mjs",
     "package:linux": "npm run build && npm run verify:sidecars && electron-builder --config electron-builder.yml --linux AppImage deb rpm --x64 --publish never",
     "package:win": "npm run build && npm run verify:sidecars && electron-builder --config electron-builder.yml --win nsis portable --x64 --publish never",

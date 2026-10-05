@@ -1,0 +1,341 @@
+{
+  "buildSha256": "7cdb64d7e0fc2172f9bfee96d7f12bc6ca4ed68afc297bce23e9047b391e8717",
+  "date": "2026-10-05T18:40:46.209Z",
+  "platform": "linux",
+  "cpu": "AMD Ryzen 5 PRO 5650U with Radeon Graphics",
+  "revision": "baseline-built-app-final-runner",
+  "runs": 5,
+  "pdfStartingZoomPercent": 100,
+  "results": [
+    {
+      "scenario": "large-page",
+      "samples": [
+        {
+          "workspaceMs": 35,
+          "paginationMs": null,
+          "searchMs": 25.5,
+          "workspaceRenderMs": 2545,
+          "scrollFrameP95Ms": 42,
+          "heapBytes": 131029804,
+          "longTasks": 1,
+          "longTaskMs": 1449,
+          "ipcCalls": 3
+        },
+        {
+          "workspaceMs": 37.900000005960464,
+          "paginationMs": null,
+          "searchMs": 10.099999994039536,
+          "workspaceRenderMs": 2395,
+          "scrollFrameP95Ms": 44.5,
+          "heapBytes": 246107332,
+          "longTasks": 1,
+          "longTaskMs": 1452,
+          "ipcCalls": 3
+        },
+        {
+          "workspaceMs": 33.600000001490116,
+          "paginationMs": null,
+          "searchMs": 9.200000002980232,
+          "workspaceRenderMs": 2376,
+          "scrollFrameP95Ms": 44.19999999552965,
+          "heapBytes": 367649232,
+          "longTasks": 1,
+          "longTaskMs": 1205,
+          "ipcCalls": 3
+        },
+        {
+          "workspaceMs": 42.100000001490116,
+          "paginationMs": null,
+          "searchMs": 16.600000001490116,
+          "workspaceRenderMs": 2698,
+          "scrollFrameP95Ms": 43.399999998509884,
+          "heapBytes": 482157948,
+          "longTasks": 2,
+          "longTaskMs": 1310,
+          "ipcCalls": 3
+        },
+        {
+          "workspaceMs": 35.600000001490116,
+          "paginationMs": null,
+          "searchMs": 26.099999994039536,
+          "workspaceRenderMs": 2188,
+          "scrollFrameP95Ms": 51.899999998509884,
+          "heapBytes": 598724392,
+          "longTasks": 3,
+          "longTaskMs": 1291,
+          "ipcCalls": 3
+        }
+      ],
+      "medians": {
+        "workspaceMs": 35.600000001490116,
+        "paginationMs": null,
+        "searchMs": 16.600000001490116,
+        "workspaceRenderMs": 2395,
+        "scrollFrameP95Ms": 44.19999999552965,
+        "heapBytes": 367649232,
+        "longTasks": 1,
+        "longTaskMs": 1310,
+        "ipcCalls": 3
+      }
+    },
+    {
+      "scenario": "paginated-notes",
+      "samples": [
+        {
+          "workspaceMs": 5.100000001490116,
+          "paginationMs": 4.600000001490116,
+          "searchMs": 10,
+          "workspaceRenderMs": 310,
+          "scrollFrameP95Ms": 20.600000001490116,
+          "heapBytes": 615483052,
+          "longTasks": 1,
+          "longTaskMs": 136,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 4.5,
+          "paginationMs": 4.299999997019768,
+          "searchMs": 8.700000002980232,
+          "workspaceRenderMs": 269,
+          "scrollFrameP95Ms": 20.100000001490116,
+          "heapBytes": 635376428,
+          "longTasks": 1,
+          "longTaskMs": 144,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 5.199999995529652,
+          "paginationMs": 5.600000001490116,
+          "searchMs": 10.799999997019768,
+          "workspaceRenderMs": 336,
+          "scrollFrameP95Ms": 20.5,
+          "heapBytes": 653384868,
+          "longTasks": 1,
+          "longTaskMs": 167,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 4.700000002980232,
+          "paginationMs": 15.5,
+          "searchMs": 10.100000001490116,
+          "workspaceRenderMs": 299,
+          "scrollFrameP95Ms": 20.399999998509884,
+          "heapBytes": 663911864,
+          "longTasks": 1,
+          "longTaskMs": 140,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 4.100000001490116,
+          "paginationMs": 4.299999997019768,
+          "searchMs": 8.100000001490116,
+          "workspaceRenderMs": 311,
+          "scrollFrameP95Ms": 20.700000002980232,
+          "heapBytes": 681146268,
+          "longTasks": 1,
+          "longTaskMs": 145,
+          "ipcCalls": 4
+        }
+      ],
+      "medians": {
+        "workspaceMs": 4.700000002980232,
+        "paginationMs": 4.600000001490116,
+        "searchMs": 10,
+        "workspaceRenderMs": 310,
+        "scrollFrameP95Ms": 20.5,
+        "heapBytes": 653384868,
+        "longTasks": 1,
+        "longTaskMs": 144,
+        "ipcCalls": 4
+      }
+    },
+    {
+      "scenario": "mixed-assets",
+      "samples": [
+        {
+          "workspaceMs": 13.699999995529652,
+          "paginationMs": 10.700000002980232,
+          "searchMs": 18.299999997019768,
+          "workspaceRenderMs": 273,
+          "scrollFrameP95Ms": 20.599999994039536,
+          "heapBytes": 689940440,
+          "longTasks": 1,
+          "longTaskMs": 83,
+          "ipcCalls": 71
+        },
+        {
+          "workspaceMs": 11.800000004470348,
+          "paginationMs": 6.699999995529652,
+          "searchMs": 9.5,
+          "workspaceRenderMs": 232,
+          "scrollFrameP95Ms": 20.100000001490116,
+          "heapBytes": 706729132,
+          "longTasks": 1,
+          "longTaskMs": 71,
+          "ipcCalls": 71
+        },
+        {
+          "workspaceMs": 9.5,
+          "paginationMs": 2.899999998509884,
+          "searchMs": 9.600000001490116,
+          "workspaceRenderMs": 257,
+          "scrollFrameP95Ms": 20.100000001490116,
+          "heapBytes": 711494024,
+          "longTasks": 1,
+          "longTaskMs": 90,
+          "ipcCalls": 71
+        },
+        {
+          "workspaceMs": 14.5,
+          "paginationMs": 17,
+          "searchMs": 10.899999998509884,
+          "workspaceRenderMs": 258,
+          "scrollFrameP95Ms": 20.100000001490116,
+          "heapBytes": 719850448,
+          "longTasks": 1,
+          "longTaskMs": 77,
+          "ipcCalls": 71
+        },
+        {
+          "workspaceMs": 11.700000002980232,
+          "paginationMs": 6.5,
+          "searchMs": 10.199999995529652,
+          "workspaceRenderMs": 314,
+          "scrollFrameP95Ms": 20,
+          "heapBytes": 736370872,
+          "longTasks": 1,
+          "longTaskMs": 132,
+          "ipcCalls": 71
+        }
+      ],
+      "medians": {
+        "workspaceMs": 11.800000004470348,
+        "paginationMs": 6.699999995529652,
+        "searchMs": 10.199999995529652,
+        "workspaceRenderMs": 258,
+        "scrollFrameP95Ms": 20.100000001490116,
+        "heapBytes": 711494024,
+        "longTasks": 1,
+        "longTaskMs": 83,
+        "ipcCalls": 71
+      }
+    },
+    {
+      "scenario": "active-search",
+      "samples": [
+        {
+          "workspaceMs": 15.5,
+          "paginationMs": 14.799999997019768,
+          "searchMs": 10.100000001490116,
+          "workspaceRenderMs": 962,
+          "scrollFrameP95Ms": 21.299999997019768,
+          "heapBytes": 786932328,
+          "longTasks": 1,
+          "longTaskMs": 494,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 13.800000004470348,
+          "paginationMs": 14.199999995529652,
+          "searchMs": 15.899999998509884,
+          "workspaceRenderMs": 941,
+          "scrollFrameP95Ms": 18.5,
+          "heapBytes": 828324388,
+          "longTasks": 1,
+          "longTaskMs": 491,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 15.299999997019768,
+          "paginationMs": 17.80000000447035,
+          "searchMs": 10.100000001490116,
+          "workspaceRenderMs": 943,
+          "scrollFrameP95Ms": 19.299999997019768,
+          "heapBytes": 879509520,
+          "longTasks": 1,
+          "longTaskMs": 487,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 14.300000004470348,
+          "paginationMs": 13.899999998509884,
+          "searchMs": 8.799999997019768,
+          "workspaceRenderMs": 971,
+          "scrollFrameP95Ms": 21.899999998509884,
+          "heapBytes": 930062808,
+          "longTasks": 1,
+          "longTaskMs": 483,
+          "ipcCalls": 4
+        },
+        {
+          "workspaceMs": 14.299999997019768,
+          "paginationMs": 15.700000002980232,
+          "searchMs": 10.299999997019768,
+          "workspaceRenderMs": 940,
+          "scrollFrameP95Ms": 18.5,
+          "heapBytes": 979429264,
+          "longTasks": 1,
+          "longTaskMs": 473,
+          "ipcCalls": 4
+        }
+      ],
+      "medians": {
+        "workspaceMs": 14.300000004470348,
+        "paginationMs": 14.799999997019768,
+        "searchMs": 10.100000001490116,
+        "workspaceRenderMs": 943,
+        "scrollFrameP95Ms": 19.299999997019768,
+        "heapBytes": 879509520,
+        "longTasks": 1,
+        "longTaskMs": 487,
+        "ipcCalls": 4
+      }
+    },
+    {
+      "scenario": "pdf-recording",
+      "samples": [
+        {
+          "pdfZoomMs": 216,
+          "resizeMs": 96,
+          "recordingFrameP95Ms": 18.80000000447035,
+          "recordingSaveMs": 322
+        },
+        {
+          "pdfZoomMs": 94,
+          "resizeMs": 98,
+          "recordingFrameP95Ms": 18.600000001490116,
+          "recordingSaveMs": 287
+        },
+        {
+          "pdfZoomMs": 112,
+          "resizeMs": 91,
+          "recordingFrameP95Ms": 19,
+          "recordingSaveMs": 287
+        },
+        {
+          "pdfZoomMs": 108,
+          "resizeMs": 95,
+          "recordingFrameP95Ms": 18.899999998509884,
+          "recordingSaveMs": 305
+        },
+        {
+          "pdfZoomMs": 92,
+          "resizeMs": 96,
+          "recordingFrameP95Ms": 18.700000002980232,
+          "recordingSaveMs": 299
+        }
+      ],
+      "medians": {
+        "pdfZoomMs": 108,
+        "resizeMs": 96,
+        "recordingFrameP95Ms": 18.80000000447035,
+        "recordingSaveMs": 299
+      }
+    }
+  ],
+  "limitations": [
+    "Linux desktop with fake microphone; real device latency and Windows are unverified.",
+    "Resize includes harness IPC-to-frame latency; explicit zoom remains fixed during resize. Interaction sampling starts at comparable zoom below 190%.",
+    "IPC volume uses Electron internal invoke-handler instrumentation in this development harness."
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "marked": "^17.0.0",
+    "playwright-core": "^1.61.0"
+  }
+}

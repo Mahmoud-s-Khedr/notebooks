@@ -107,3 +107,9 @@ Status legend: `[x]` completed, `[ ]` planned.
 - [ ] Mobile clients.
 - [ ] Notion-style databases, project management, calendar, kanban, whiteboards, or a plugin marketplace.
 - [ ] Automatic AI transformations, semantic search, embeddings, and LLM integration until the canonical capture/export workflow is solid.
+
+## Reliability update — 2026-10-05
+
+The recording/navigation/migration/PDF/control work is implemented and tracked in [issue-resolutions.md](issue-resolutions.md), which supersedes earlier UI limitations in this historical roadmap. The app has an application-owned recording/save boundary, correlated close handshake, transactional/idempotent recording attachments, authoritative move restrictions, explicit source navigation, real PDF text selection, note actions, filtering and truthful search/readiness states. No schema/archive/backup-format migration was introduced.
+
+Run the isolated Linux Electron runner and five-sample benchmark described in [guide-maintenance.md](guide-maintenance.md). Real Windows hardware/runtime/provider checks remain separately documented; a missing prerequisite is not reported as a successful transcription.

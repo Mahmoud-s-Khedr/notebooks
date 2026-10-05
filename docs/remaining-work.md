@@ -1,76 +1,27 @@
 # Remaining work
 
-This is the working backlog after completing Phase 4 core renderer workflow tests.
+This is the working backlog after the October 2026 reliability and guide update.
 It complements the fuller rationale in [test-improvement-plan.md](./test-improvement-plan.md)
 and the product roadmap in [plan.md](./plan.md).
 
-## Test program
+## Verified reliability work
 
-### Renderer follow-up
+The recording/migration/navigation/PDF/control fixes and their verification are tracked in [issue-resolutions.md](issue-resolutions.md). The Linux Electron runner is `scripts/guide/reliability.mjs`; the five-sample performance runner is `scripts/perf-scenarios.mjs`, with results and limitations in [performance-budgets.md](performance-budgets.md).
 
-Extend renderer coverage to the workflows intentionally left outside the core
-notebook/editor/source increment:
+## External verification still required
 
-- settings;
-- diagnostics;
-- jobs;
-- trash dialogs; and
-- export/import utilities.
+- Windows execution and installer/package smoke checks; this environment only supplies Linux.
+- Real microphone permission prompts, speech playback, hardware mute/disconnect and device latency; synthetic input verifies recording persistence and error recovery.
+- Real local Whisper recognition with a supported runtime and installed model. Controlled provider fixtures verify service behavior; the development runtime is unavailable.
+- Live OpenRouter recognition only under separate explicit authorization with credentials and charge approval. No cloud request was made here.
+- Clean-machine package installation on each supported Linux distribution.
 
-Use the existing typed preload mock, factories, jsdom setup, and accessible
-Testing Library queries. Keep native canvas/pixel fidelity as an Electron E2E
-concern.
+## Follow-up work
 
-### Phase 5 — Electron E2E
-
-Add a small Playwright Electron smoke suite. Build the app, launch the compiled
-main process with a unique temporary user-data directory per test, and retain
-traces, screenshots, and main-process logs only on failures.
-
-Implement in this order:
-
-1. Launch; create a notebook, page, and note; edit text; and reorder blocks.
-2. Quit and relaunch; verify hierarchy and ordering persisted.
-3. Export a notebook, import it into a fresh library, and verify content and
-   assets.
-4. Verify one safe failure path, such as a cancelled chooser or unavailable
-   transcription/model state.
-
-Run this on Linux with `xvfb` first. Add Windows coverage only after the Linux
-smoke suite is stable.
-
-### Phase 6 — Performance
-
-Turn documented scenarios into an executable benchmark harness that:
-
-- creates fixtures in a temporary library;
-- drives large-page, paginated-notes, mixed-assets, and active-search flows;
-- records five samples for workspace load, cursor paging, search, and input
-  responsiveness; and
-- emits median JSON results plus a CI artifact report.
-
-Initially report regressions without failing hosted CI. Gate the documented 25%
-regression threshold only on a controlled runner or after a repeat-confirmation
-policy is established.
-
-### CI rollout
-
-1. Publish coverage and run test, type-check, lint, format, and build checks.
-2. Run Linux Electron E2E after the production build.
-3. Make packaging depend on those checks and E2E.
-4. Upload performance reports as non-blocking artifacts, then promote stable
-   performance regressions to required checks.
-
-## Product backlog
-
-- Add Linux- and Windows-style archive fixtures that prove validation rejection
-  and staging-directory cleanup.
-- Route local transcription through the persistent job queue and terminate the
-  Whisper child process when cancelled.
-- Replace the basic PDF writer with hidden-renderer Electron `printToPDF`.
-- Add on-demand cached image/PDF thumbnails with deferred loading and fallback
-  presentation.
-- Measure and improve large-document renderer performance.
+- Broaden settings/diagnostics/export renderer interaction tests beyond the regression and real Electron checks already supplied.
+- Run the Linux Electron workflow in CI with a controlled display/Xvfb; add Windows once a runner is available.
+- Publish benchmark JSON as CI artifacts and gate controlled-machine comparisons after repeated measurements are stable.
+- Add transcript history/editing and additional insertion types only under a separate product scope.
 
 ## Explicitly deferred
 

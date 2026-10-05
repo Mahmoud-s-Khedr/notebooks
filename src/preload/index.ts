@@ -2,6 +2,18 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { ResearchNotebookApi } from '../shared/domain'
 
 const api: ResearchNotebookApi = {
+  lifecycle: {
+    onCloseRequest: (handler) => {
+      const listener = (_event: Electron.IpcRendererEvent, requestId: string) => {
+        void handler(requestId)
+      }
+      ipcRenderer.on('lifecycle:save-before-close', listener)
+      ipcRenderer.send('lifecycle:ready')
+      return () => ipcRenderer.removeListener('lifecycle:save-before-close', listener)
+    },
+    closeResult: (input) => ipcRenderer.send('lifecycle:close-result', input),
+    restart: () => ipcRenderer.invoke('lifecycle:restart')
+  },
   notebooks: {
     list: () => ipcRenderer.invoke('notebooks:list'),
     create: (input) => ipcRenderer.invoke('notebooks:create', input),
@@ -52,7 +64,7 @@ const api: ResearchNotebookApi = {
     cancelModelDownload: (input) => ipcRenderer.invoke('settings:models:cancel', input),
     removeModel: (input) => ipcRenderer.invoke('settings:models:remove', input),
     setDefaultModel: (input) => ipcRenderer.invoke('settings:models:default', input),
-    storage: () => ipcRenderer.invoke('settings:storage'),
+    storage: (input) => ipcRenderer.invoke('settings:storage', input),
     moveLibrary: () => ipcRenderer.invoke('settings:migration:start'),
     migrationStatus: () => ipcRenderer.invoke('settings:migration:status'),
     removeOldLibrary: () => ipcRenderer.invoke('settings:migration:remove-old')

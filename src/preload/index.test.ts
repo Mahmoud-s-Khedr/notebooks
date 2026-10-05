@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   exposed: undefined as unknown,
   invocations: [] as Array<[string, unknown]>,
-  listeners: new Map<string, (event: any) => void>()
+  listeners: new Map<string, (event: any) => void>(),
+  ipcListeners: new Map<string, (...args: any[]) => void>(),
+  sent: [] as Array<[string, unknown]>
 }))
 
 vi.mock('electron', () => ({
@@ -13,6 +15,9 @@ vi.mock('electron', () => ({
     }
   },
   ipcRenderer: {
+    on: (channel: string, handler: (...args: any[]) => void) => state.ipcListeners.set(channel, handler),
+    removeListener: (channel: string) => state.ipcListeners.delete(channel),
+    send: (channel: string, input?: unknown) => state.sent.push([channel, input]),
     invoke: (channel: string, input?: unknown) => {
       state.invocations.push([channel, input])
       return Promise.resolve(undefined)
@@ -25,6 +30,8 @@ describe('preload diagnostics bridge', () => {
     state.exposed = undefined
     state.invocations.length = 0
     state.listeners.clear()
+    state.ipcListeners.clear()
+    state.sent.length = 0
     vi.stubGlobal('window', {
       addEventListener: (type: string, handler: (event: any) => void) => state.listeners.set(type, handler)
     })
@@ -83,5 +90,19 @@ describe('preload diagnostics bridge', () => {
         ]
       ])
     )
+  })
+  it('signals readiness after subscribing, correlates close replies and removes its listener', async () => {
+    const api = state.exposed as import('../shared/domain').ResearchNotebookApi
+    const handler = vi.fn().mockResolvedValue(undefined)
+    const dispose = api.lifecycle.onCloseRequest(handler)
+    expect(state.sent).toContainEqual(['lifecycle:ready', undefined])
+    state.ipcListeners.get('lifecycle:save-before-close')?.({}, 'request-id')
+    expect(handler).toHaveBeenCalledWith('request-id')
+    api.lifecycle.closeResult({ requestId: 'request-id', saved: false })
+    expect(state.sent).toContainEqual(['lifecycle:close-result', { requestId: 'request-id', saved: false }])
+    await api.lifecycle.restart()
+    expect(state.invocations).toContainEqual(['lifecycle:restart', undefined])
+    dispose()
+    expect(state.ipcListeners.has('lifecycle:save-before-close')).toBe(false)
   })
 })

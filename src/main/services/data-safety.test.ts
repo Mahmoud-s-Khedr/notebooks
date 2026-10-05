@@ -190,3 +190,132 @@ describe('library data safety on disk', () => {
     rmSync(destination, { recursive: true, force: true })
   })
 })
+
+describe('migration write barrier', () => {
+  it('rejects writes while copying and awaiting restart, then reopens the destination before original removal', async () => {
+    const root = new TestLibrary()
+    const destination = `${root.root}-barrier`
+    const bootstrap = join(root.root, 'bootstrap.json')
+    let reopened: NotebookDatabase | undefined
+    try {
+      const service = new NotebookService(root.database, root.assets, root.config, undefined, {
+        root: root.root,
+        bootstrapPath: bootstrap
+      })
+      const notebook = service.createNotebook('Protected')
+      const page = service.createPage(notebook.id, 'Page')
+      const note = service.createNote(page.id, 'Note')
+      const job = service.startLibraryMove(destination)
+      expect(['queued', 'copying']).toContain(service.migrationStatus().state)
+      for (const mutate of [
+        () => service.createNote(page.id, 'Lost'),
+        () => service.updateNote(note.id, 'Changed'),
+        () => service.updatePreferences({ theme: 'dark' }),
+        () => service.startBackup(root.root),
+        () => service.saveRecording(note.id, validWav().toString('base64'))
+      ])
+        expect(mutate).toThrow('Library move')
+      await waitForJob(service, job)
+      expect(service.migrationStatus().state).toBe('pending-restart')
+      expect(() => service.createNotebook('Late write')).toThrow('Library move')
+      expect(() => service.removeOldLibrary()).toThrow('no retained original')
+      const pointer = JSON.parse(readFileSync(bootstrap, 'utf8'))
+      reopened = new NotebookDatabase(join(pointer.activeRoot, 'database.sqlite'))
+      const activated = new NotebookService(
+        reopened,
+        join(pointer.activeRoot, 'assets'),
+        join(pointer.activeRoot, 'config'),
+        undefined,
+        { root: pointer.activeRoot, bootstrapPath: bootstrap, previousRoot: root.root }
+      )
+      expect(activated.listNotebooks()[0].title).toBe('Protected')
+      expect(activated.listJobs().find((j) => j.kind === 'library-move')?.status).toBe('completed')
+      activated.createNotebook('After restart')
+      activated.removeOldLibrary()
+      expect(existsSync(pointer.activeRoot)).toBe(true)
+    } finally {
+      reopened?.close()
+      root.close()
+      rmSync(destination, { recursive: true, force: true })
+    }
+  })
+  it('releases the barrier after cancellation and refuses a move with active jobs', async () => {
+    const root = new TestLibrary()
+    const destination = `${root.root}-cancel`
+    try {
+      const service = new NotebookService(root.database, root.assets, root.config, undefined, {
+        root: root.root,
+        bootstrapPath: join(root.root, 'bootstrap.json')
+      })
+      const job = service.startLibraryMove(destination)
+      expect(() => service.startLibraryMove(destination)).toThrow('Library move')
+      service.cancelJob(job.id)
+      await waitForJob(service, job)
+      expect(service.migrationStatus().state).toBe('failed')
+      expect(() => service.createNotebook('Recovered')).not.toThrow()
+      const id = randomUUID()
+      root.database.connection
+        .prepare(
+          "INSERT INTO jobs(id,kind,status,payload_json,created_at,updated_at) VALUES (?,'backup','queued','{}',?,?)"
+        )
+        .run(id, new Date().toISOString(), new Date().toISOString())
+      expect(() => service.startLibraryMove(destination)).toThrow('Finish or cancel')
+    } finally {
+      root.close()
+      rmSync(destination, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('recording commit safety', () => {
+  it('rolls back partial attachment writes and deduplicates retries by operation ID', () => {
+    const root = new TestLibrary()
+    try {
+      const notebook = root.service.createNotebook('Recordings')
+      const page = root.service.createPage(notebook.id, 'Audio')
+      const note = root.service.createNote(page.id, 'Target')
+      const operationId = randomUUID()
+      root.database.connection.exec(
+        "CREATE TRIGGER reject_recording BEFORE INSERT ON asset_references BEGIN SELECT RAISE(ABORT,'Controlled attachment failure'); END"
+      )
+      expect(() => root.service.saveRecording(note.id, validWav().toString('base64'), 'test.wav', operationId)).toThrow(
+        'Controlled attachment failure'
+      )
+      expect(root.service.listAssets(notebook.id)).toEqual([])
+      expect(root.service.getPageWorkspace(page.id).notes[0].blocks).toEqual([])
+      root.database.connection.exec('DROP TRIGGER reject_recording')
+      const first = root.service.saveRecording(note.id, validWav().toString('base64'), 'test.wav', operationId)
+      const repeated = root.service.saveRecording(note.id, validWav().toString('base64'), 'test.wav', operationId)
+      expect(repeated.id).toBe(first.id)
+      expect(root.service.listAssets(notebook.id)).toHaveLength(1)
+      expect(root.service.getPageWorkspace(page.id).notes[0].blocks).toHaveLength(1)
+    } finally {
+      root.close()
+    }
+  })
+})
+
+describe('failed library copy recovery', () => {
+  it('keeps the original and releases writes after managed-byte verification fails', async () => {
+    const root = new TestLibrary()
+    const destination = `${root.root}-failed-move`
+    try {
+      const service = new NotebookService(root.database, root.assets, root.config, undefined, {
+        root: root.root,
+        bootstrapPath: join(root.root, 'bootstrap.json')
+      })
+      const notebook = service.createNotebook('Original')
+      const asset = service.importAsset(notebook.id, 'file', writeFixture(root.root, 'evidence.bin', 'verified bytes'))
+      writeFixture(join(root.assets, 'files'), asset.relativePath.split('/').at(-1)!, 'changed after import')
+      const job = await waitForJob(service, service.startLibraryMove(destination))
+      expect(job.status).toBe('failed')
+      expect(service.migrationStatus().state).toBe('failed')
+      expect(existsSync(join(root.root, 'database.sqlite'))).toBe(true)
+      expect(() => service.createNotebook('Recovered')).not.toThrow()
+      assertNoStaging(destination)
+    } finally {
+      root.close()
+      rmSync(destination, { recursive: true, force: true })
+    }
+  })
+})

@@ -121,7 +121,18 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
     schema: Schema,
     handler: (input: z.output<Schema>) => unknown,
     dialogMetadata?: NotebookIpcDialog
-  ) => endpoints.push(endpoint(channel, schema, handler, dialogMetadata))
+  ) =>
+    endpoints.push(
+      endpoint(
+        channel,
+        schema,
+        (input) => {
+          if (dialogMetadata && channel !== 'diagnostics:export') service.assertWritable()
+          return handler(input)
+        },
+        dialogMetadata
+      )
+    )
   register('notebooks:list', z.undefined(), () => service.listNotebooks())
   register('notebooks:create', z.object({ title: titleSchema }).strict(), (input) =>
     service.createNotebook(input.title)
@@ -219,10 +230,11 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
       .object({
         noteId: idSchema,
         wavBase64: z.string().min(60).max(80_000_000),
-        filename: z.string().max(180).optional()
+        filename: z.string().max(180).optional(),
+        operationId: idSchema.optional()
       })
       .strict(),
-    (input) => service.saveRecording(input.noteId, input.wavBase64, input.filename)
+    (input) => service.saveRecording(input.noteId, input.wavBase64, input.filename, input.operationId)
   )
   register(
     'assets:request-thumbnail',
@@ -297,7 +309,9 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
   register('settings:models:default', z.object({ modelId: z.string().max(120) }).strict(), (input) =>
     service.setDefaultWhisperModel(input.modelId)
   )
-  register('settings:storage', z.undefined(), () => service.storageSummary())
+  register('settings:storage', z.object({ refresh: z.boolean().optional() }).strict().optional(), (input) =>
+    service.storageSummary(input?.refresh)
+  )
   register('settings:migration:status', z.undefined(), () => service.migrationStatus())
   register(
     'settings:migration:start',

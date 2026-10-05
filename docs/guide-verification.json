@@ -1,0 +1,125 @@
+{
+  "verifiedAt": "2026-10-05T18:44:23.957Z",
+  "version": "0.1.0",
+  "exports": [
+    {
+      "format": "markdown",
+      "scope": "notebook",
+      "assets": 6
+    },
+    {
+      "format": "pdf",
+      "scope": "page"
+    },
+    {
+      "format": "lossless-json",
+      "scope": "notebook",
+      "assets": 6,
+      "sources": 1,
+      "relations": 2
+    },
+    {
+      "format": "ai-context",
+      "scope": "note",
+      "assets": 1
+    },
+    {
+      "kind": "library-backup",
+      "assetHashes": 7
+    }
+  ],
+  "disposableFilesystemRecovery": {
+    "notebooks": 1,
+    "pages": 2,
+    "blocks": 19,
+    "sourceLinks": 2,
+    "audio": 2
+  },
+  "method": "Copied backup database.sqlite/assets into a fresh isolated profile; verified app content and asset loading. No lossless import used for recovery.",
+  "guideArtifacts": {
+    "offlineHtml": true,
+    "brokenImages": 0,
+    "missingContentsTargets": 0,
+    "externalResources": 0,
+    "responsiveWidth": 390,
+    "responsiveOverflow": false,
+    "pdfPages": 45,
+    "annotatedFigures": 49,
+    "missingPdfCaptions": [],
+    "missingMarkdownFiles": [],
+    "outOfPageTextBlocks": 0,
+    "embeddedOriginalsClippedBySvg": 20,
+    "nonwhitePageEdges": []
+  },
+  "modelAndKeyControls": {
+    "verifiedModels": ["ggml-tiny.bin", "ggml-base.bin"],
+    "defaultChanged": "Base to Tiny",
+    "nondefaultModelRemoved": "Base",
+    "keyStorageControls": "Saved, replaced and removed dummy local values; no cloud request while configured",
+    "localTranscriptSuccess": false,
+    "reason": "Bundled Whisper executable absent",
+    "restartVerified": true,
+    "finalDefault": "ggml-tiny.bin",
+    "realCredentialConfigured": false
+  },
+  "priorVerificationAt": "2026-10-05T16:14:26.407Z",
+  "currentBuild": {
+    "version": "0.1.0",
+    "buildSha256": "e62c82b4ae01ccde8f2cb873a81fa7a324b811e8642a34ead1e281989924c16b",
+    "revision": "ae1dddb4d0ca5367eb0f02a1e9812aa884922d1c",
+    "workingTree": true,
+    "captureDate": "2026-10-05",
+    "platform": "linux"
+  },
+  "workflowVerification": {
+    "date": "2026-10-05T18:44:23.957Z",
+    "revision": "ae1dddb4d0ca5367eb0f02a1e9812aa884922d1c",
+    "buildSha256": "e62c82b4ae01ccde8f2cb873a81fa7a324b811e8642a34ead1e281989924c16b",
+    "workingTree": true,
+    "platform": "linux",
+    "isolatedLibrary": "/tmp/notebook-workflow-BJAR2X",
+    "observations": [
+      "PDF.js selectable text layer rendered in Electron",
+      "Real mouse drag selected PDF text",
+      "PDF zoom preserves edited extracted text",
+      "Invalid PDF page is clamped to document bounds",
+      "Source link from Write restores Research mode and printed-page provenance",
+      "Switching sources clears printed-page draft provenance",
+      "Cross-document source link restores the original source and printed page",
+      "PDF capture controls remain visible at 960 \u00d7 640",
+      "Failed recording save cancels mode navigation",
+      "Unavailable local runtime disables execution before a paid or local request",
+      "Permanent deletion defaults focus to Cancel",
+      "Lossless import immediately opens its first page",
+      "Failed recording save cancels window closure and retains Retry save",
+      "Window close saves exactly one additional recording and both recovered clips survive relaunch",
+      "Main/service write barrier rejects late writes while awaiting restart",
+      "Restart bootstrap activates the destination and retains the original",
+      "Original removal preserves the active imported and original notebooks"
+    ],
+    "limitations": [
+      "Synthetic microphone only.",
+      "Restart relaunch was intercepted to keep the harness in control; a fresh Electron process exercised the real bootstrap destination.",
+      "No cloud request or real Whisper execution."
+    ]
+  },
+  "verificationChecks": {
+    "testFiles": 19,
+    "testsPassed": 96,
+    "typecheck": true,
+    "lint": true,
+    "format": true,
+    "build": true,
+    "electronObservations": 17,
+    "pdfVisualReview": "Contents, updated media/disclosure page and feedback page reviewed; figure captions and raster page edges checked across all 45 pages."
+  },
+  "performance": {
+    "runs": 5,
+    "budgetPercent": 25,
+    "overBudgetMetrics": 0,
+    "beforeBuildSha256": "7cdb64d7e0fc2172f9bfee96d7f12bc6ca4ed68afc297bce23e9047b391e8717",
+    "afterBuildSha256": "e62c82b4ae01ccde8f2cb873a81fa7a324b811e8642a34ead1e281989924c16b",
+    "report": "performance-comparison.json",
+    "investigation": "performance-investigation.json"
+  }
+}

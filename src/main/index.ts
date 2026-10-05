@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { randomUUID } from 'node:crypto'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { is } from '@electron-toolkit/utils'
@@ -8,6 +9,12 @@ import { NotebookService } from './services/notebook-service'
 import { ErrorLogService, appendFallbackError } from './services/error-log-service'
 import { resolveLibraryBootstrap } from './library-bootstrap'
 
+let closeRequest: string | null = null
+let closeAcknowledged = false
+let closeApproved = false
+let restartRequested = false
+let quitRequested = false
+let notebookService: NotebookService | undefined
 let mainWindow: BrowserWindow | undefined
 let database: NotebookDatabase | undefined
 let errors: ErrorLogService | undefined
@@ -45,6 +52,15 @@ function createWindow(): void {
     }
   })
 
+  closeApproved = false
+  mainWindow.on('close', (event) => {
+    if (closeApproved) return
+    event.preventDefault()
+    if (closeRequest) return
+    closeRequest = randomUUID()
+    closeAcknowledged = false
+    mainWindow?.webContents.send('lifecycle:save-before-close', closeRequest)
+  })
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
   mainWindow.webContents.on('render-process-gone', (_event, details) =>
@@ -101,6 +117,7 @@ app
       { root: dataDirectory, bootstrapPath, previousRoot },
       errors
     )
+    notebookService = service
     registerNotebookIpc(service, errors)
     service.resumeJobs()
     createWindow()
@@ -127,4 +144,69 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => database?.close())
+ipcMain.on('lifecycle:ready', (event) => {
+  if (
+    event.sender === mainWindow?.webContents &&
+    event.senderFrame === mainWindow.webContents.mainFrame &&
+    closeRequest &&
+    !closeAcknowledged
+  )
+    mainWindow.webContents.send('lifecycle:save-before-close', closeRequest)
+})
+ipcMain.on('lifecycle:close-result', async (event, input: unknown) => {
+  if (
+    event.sender !== mainWindow?.webContents ||
+    event.senderFrame !== mainWindow.webContents.mainFrame ||
+    !input ||
+    typeof input !== 'object'
+  )
+    return
+  const response = input as { requestId?: unknown; saved?: unknown }
+  if (!closeRequest || closeAcknowledged || response.requestId !== closeRequest || typeof response.saved !== 'boolean')
+    return
+  closeAcknowledged = true
+  if (!response.saved) {
+    closeRequest = null
+    restartRequested = false
+    quitRequested = false
+    return
+  }
+  try {
+    await notebookService?.finishPendingWrites()
+  } catch (error) {
+    closeRequest = null
+    reportStartupError(error, 'shutdown.pending-writes', 'error')
+    restartRequested = false
+    quitRequested = false
+    await dialog.showMessageBox({
+      type: 'error',
+      message: 'Unable to finish background writes. The library remains open.',
+      detail: error instanceof Error ? error.message : String(error)
+    })
+    return
+  }
+  closeRequest = null
+  closeApproved = true
+  mainWindow?.close()
+  if (restartRequested) {
+    app.relaunch()
+    app.quit()
+  } else if (quitRequested) app.quit()
+})
+ipcMain.handle('lifecycle:restart', (event) => {
+  if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame)
+    throw new Error('Invalid restart sender.')
+  if (notebookService?.migrationStatus().state !== 'pending-restart')
+    throw new Error('No verified move is awaiting restart.')
+  restartRequested = true
+  mainWindow.close()
+})
+app.on('before-quit', (event) => {
+  if (mainWindow && !mainWindow.isDestroyed() && !closeApproved) {
+    event.preventDefault()
+    quitRequested = true
+    mainWindow.close()
+    return
+  }
+  database?.close()
+})

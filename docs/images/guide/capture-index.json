@@ -1,0 +1,1813 @@
+{
+  "complete": true,
+  "version": "0.1.0",
+  "capturedAt": "2026-10-05T16:14:01.875Z",
+  "platform": "linux",
+  "pdf": "think-python-2nd.pdf",
+  "microphone": "Chromium synthetic audio device; no real microphone permission prompt or speech tested",
+  "captures": [
+    {
+      "id": "01-first-run",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 803.734375,
+          "y": 500,
+          "width": 128.53125,
+          "height": 34,
+          "n": 1,
+          "description": "Create notebook"
+        },
+        {
+          "x": 15,
+          "y": 785,
+          "width": 266,
+          "height": 34,
+          "n": 2,
+          "description": "New notebook"
+        },
+        {
+          "x": 1388,
+          "y": 10.5,
+          "width": 34,
+          "height": 34,
+          "n": 3,
+          "description": "Application menu"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/01-first-run.png"
+    },
+    {
+      "id": "02-hierarchy",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 43,
+          "y": 156,
+          "width": 207,
+          "height": 18,
+          "n": 1,
+          "description": "Notebook title"
+        },
+        {
+          "x": 440,
+          "y": 140,
+          "width": 700.21875,
+          "height": 51,
+          "n": 2,
+          "description": "Page title"
+        },
+        {
+          "x": 43,
+          "y": 216,
+          "width": 200,
+          "height": 28,
+          "n": 3,
+          "description": "New page"
+        },
+        {
+          "x": 1149.21875,
+          "y": 135,
+          "width": 103.78125,
+          "height": 34,
+          "n": 4,
+          "description": "Add note"
+        },
+        {
+          "x": 1262,
+          "y": 135,
+          "width": 34,
+          "height": 34,
+          "n": 5,
+          "description": "Page actions"
+        },
+        {
+          "x": 257,
+          "y": 156.5,
+          "width": 17,
+          "height": 17,
+          "n": 6,
+          "description": "Notebook trash"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/02-hierarchy.png"
+    },
+    {
+      "id": "03-block-types",
+      "width": 1440,
+      "height": 1184,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Text",
+          "shape": "rect",
+          "x": 595,
+          "y": 214,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 2,
+          "description": "Source text",
+          "shape": "rect",
+          "x": 595,
+          "y": 332,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 3,
+          "description": "Commentary",
+          "shape": "rect",
+          "x": 595,
+          "y": 450,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 4,
+          "description": "Explanation",
+          "shape": "rect",
+          "x": 595,
+          "y": 568,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 5,
+          "description": "Question",
+          "shape": "rect",
+          "x": 595,
+          "y": 686,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 6,
+          "description": "Answer",
+          "shape": "rect",
+          "x": 595,
+          "y": 804,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 7,
+          "description": "Quote",
+          "shape": "rect",
+          "x": 595,
+          "y": 922,
+          "width": 656,
+          "height": 76
+        }
+      ],
+      "displayCrop": {
+        "x": 430,
+        "y": 200,
+        "width": 870,
+        "height": 900
+      }
+    },
+    {
+      "id": "04-insert-menu",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 661,
+          "y": 93,
+          "width": 250.421875,
+          "height": 314,
+          "n": 1,
+          "description": "Keyboard block menu"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/04-insert-menu.png",
+      "displayCrop": {
+        "x": 641,
+        "y": 73,
+        "width": 290.421875,
+        "height": 354
+      }
+    },
+    {
+      "id": "05-block-actions",
+      "width": 190,
+      "height": 213,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Duplicate",
+          "shape": "rect",
+          "x": 6,
+          "y": 6,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 2,
+          "description": "Move up",
+          "shape": "rect",
+          "x": 6,
+          "y": 38,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 3,
+          "description": "Move down",
+          "shape": "rect",
+          "x": 6,
+          "y": 70,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 4,
+          "description": "Add answer",
+          "shape": "rect",
+          "x": 6,
+          "y": 102,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 5,
+          "description": "Inspector",
+          "shape": "rect",
+          "x": 6,
+          "y": 134,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 6,
+          "description": "Move to trash",
+          "shape": "rect",
+          "x": 6,
+          "y": 175,
+          "width": 178,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "06-reorder",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Drag handle",
+          "shape": "circle",
+          "x": 460,
+          "y": 168,
+          "width": 21,
+          "height": 21
+        },
+        {
+          "n": 2,
+          "description": "Focused text block for Alt+arrows",
+          "shape": "rect",
+          "x": 595,
+          "y": 169,
+          "width": 641,
+          "height": 76
+        }
+      ]
+    },
+    {
+      "id": "07-inspector",
+      "width": 360,
+      "height": 409,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Convert block",
+          "shape": "rect",
+          "x": 19,
+          "y": 98,
+          "width": 322,
+          "height": 33
+        },
+        {
+          "n": 2,
+          "description": "Relation type",
+          "shape": "rect",
+          "x": 19,
+          "y": 186,
+          "width": 130.9375,
+          "height": 33
+        },
+        {
+          "n": 3,
+          "description": "Block to link",
+          "shape": "rect",
+          "x": 154.9375,
+          "y": 186,
+          "width": 130.953125,
+          "height": 33
+        },
+        {
+          "n": 4,
+          "description": "Link",
+          "shape": "rect",
+          "x": 290.890625,
+          "y": 186,
+          "width": 50.109375,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "Existing relation and remove control",
+          "shape": "rect",
+          "x": 19,
+          "y": 227,
+          "width": 322,
+          "height": 29
+        },
+        {
+          "n": 6,
+          "description": "Read-only metadata",
+          "shape": "rect",
+          "x": 19,
+          "y": 273,
+          "width": 322,
+          "height": 66
+        },
+        {
+          "n": 7,
+          "description": "Close inspector",
+          "shape": "circle",
+          "x": 307,
+          "y": 19,
+          "width": 34,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "08-app-menu",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 1238,
+          "y": 51,
+          "width": 178,
+          "height": 32,
+          "n": 1,
+          "description": "Import lossless archive"
+        },
+        {
+          "x": 1238,
+          "y": 83,
+          "width": 178,
+          "height": 32,
+          "n": 2,
+          "description": "Whole-library backup"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/08-app-menu.png",
+      "displayCrop": {
+        "x": 1218,
+        "y": 31,
+        "width": 218,
+        "height": 104
+      }
+    },
+    {
+      "id": "09-trash",
+      "width": 600,
+      "height": 220,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Restore",
+          "shape": "rect",
+          "x": 451.171875,
+          "y": 153.15625,
+          "width": 62.390625,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Permanent Delete",
+          "shape": "rect",
+          "x": 521.5625,
+          "y": 153.15625,
+          "width": 55.4375,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "10-research",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 1219.53125,
+          "y": 13.5,
+          "width": 100.84375,
+          "height": 28,
+          "n": 1,
+          "description": "Research mode"
+        },
+        {
+          "x": 675.984375,
+          "y": 106,
+          "width": 78.140625,
+          "height": 34,
+          "n": 2,
+          "description": "Import PDF"
+        },
+        {
+          "x": 314,
+          "y": 171.5,
+          "width": 130,
+          "height": 31,
+          "n": 3,
+          "description": "Source document"
+        },
+        {
+          "x": 382.765625,
+          "y": 641.5,
+          "width": 42,
+          "height": 27,
+          "n": 4,
+          "description": "Physical PDF page"
+        },
+        {
+          "x": 314,
+          "y": 712,
+          "width": 34,
+          "height": 34,
+          "n": 5,
+          "description": "Zoom"
+        },
+        {
+          "x": 508.8125,
+          "y": 678.5,
+          "width": 42,
+          "height": 27,
+          "n": 6,
+          "description": "Printed page"
+        },
+        {
+          "x": 314,
+          "y": 755,
+          "width": 440.125,
+          "height": 58,
+          "n": 7,
+          "description": "Editable extracted text"
+        },
+        {
+          "x": 553.8125,
+          "y": 677.5,
+          "width": 111.65625,
+          "height": 29,
+          "n": 8,
+          "description": "Capture text"
+        },
+        {
+          "x": 668.46875,
+          "y": 677.5,
+          "width": 85.65625,
+          "height": 29,
+          "n": 9,
+          "description": "Create Q&A"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/10-research.png"
+    },
+    {
+      "id": "11-capture-controls",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 382.765625,
+          "y": 641.5,
+          "width": 42,
+          "height": 27,
+          "n": 1,
+          "description": "Physical page"
+        },
+        {
+          "x": 314,
+          "y": 638,
+          "width": 34,
+          "height": 34,
+          "n": 2,
+          "description": "Previous page"
+        },
+        {
+          "x": 314,
+          "y": 675,
+          "width": 34,
+          "height": 34,
+          "n": 3,
+          "description": "Next page"
+        },
+        {
+          "x": 365,
+          "y": 675,
+          "width": 34,
+          "height": 34,
+          "n": 4,
+          "description": "Zoom out"
+        },
+        {
+          "x": 314,
+          "y": 712,
+          "width": 34,
+          "height": 34,
+          "n": 5,
+          "description": "Zoom in"
+        },
+        {
+          "x": 508.8125,
+          "y": 678.5,
+          "width": 42,
+          "height": 27,
+          "n": 6,
+          "description": "Printed page"
+        },
+        {
+          "x": 314,
+          "y": 755,
+          "width": 440.125,
+          "height": 58,
+          "n": 7,
+          "description": "Editable extracted text"
+        },
+        {
+          "x": 553.8125,
+          "y": 677.5,
+          "width": 111.65625,
+          "height": 29,
+          "n": 8,
+          "description": "Capture text"
+        },
+        {
+          "x": 668.46875,
+          "y": 677.5,
+          "width": 85.65625,
+          "height": 29,
+          "n": 9,
+          "description": "Create Q&A"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/11-capture-controls.png",
+      "displayCrop": {
+        "x": 294,
+        "y": 618,
+        "width": 480.125,
+        "height": 215
+      }
+    },
+    {
+      "id": "12-evidence",
+      "width": 1800,
+      "height": 1034,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Captured source text",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 331,
+          "width": 523.6875,
+          "height": 76
+        },
+        {
+          "n": 2,
+          "description": "Source navigation",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 417,
+          "width": 195.78125,
+          "height": 21
+        },
+        {
+          "n": 3,
+          "description": "Q&A question",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 532.5,
+          "width": 523.6875,
+          "height": 76
+        },
+        {
+          "n": 4,
+          "description": "Linked blank answer",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 676,
+          "width": 523.6875,
+          "height": 76
+        }
+      ]
+    },
+    {
+      "id": "13-region",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 316.0625,
+          "y": 268,
+          "width": 421,
+          "height": 421,
+          "n": 1,
+          "description": "Region drag area"
+        },
+        {
+          "x": 993.71875,
+          "y": 556.5,
+          "width": 286,
+          "height": 55,
+          "n": 2,
+          "description": "Captured region preview"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/13-region.png"
+    },
+    {
+      "id": "14-layout",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 18,
+          "y": 10.5,
+          "width": 34,
+          "height": 34,
+          "n": 1,
+          "description": "Expand sidebar"
+        },
+        {
+          "x": 601.4375,
+          "y": 85,
+          "width": 8,
+          "height": 749,
+          "n": 2,
+          "description": "Resize source and editor panes"
+        },
+        {
+          "x": 1320.375,
+          "y": 13.5,
+          "width": 53.625,
+          "height": 28,
+          "n": 3,
+          "description": "Write mode"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/14-layout.png"
+    },
+    {
+      "id": "15-attachments",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 530,
+          "y": 210,
+          "width": 178,
+          "height": 32,
+          "n": 1,
+          "description": "Attach image"
+        },
+        {
+          "x": 530,
+          "y": 242,
+          "width": 178,
+          "height": 32,
+          "n": 2,
+          "description": "Attach screenshot"
+        },
+        {
+          "x": 530,
+          "y": 274,
+          "width": 178,
+          "height": 32,
+          "n": 3,
+          "description": "Attach audio"
+        },
+        {
+          "x": 530,
+          "y": 306,
+          "width": 178,
+          "height": 32,
+          "n": 4,
+          "description": "Attach file"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/15-attachments.png",
+      "displayCrop": {
+        "x": 510,
+        "y": 190,
+        "width": 218,
+        "height": 168
+      }
+    },
+    {
+      "id": "16-record-ready",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 558.40625,
+          "y": 671,
+          "width": 94.265625,
+          "height": 29,
+          "n": 1,
+          "description": "Start recording in this note"
+        },
+        {
+          "x": 440,
+          "y": 668.5,
+          "width": 110.40625,
+          "height": 34,
+          "n": 2,
+          "description": "Add block"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/16-record-ready.png",
+      "displayCrop": {
+        "x": 420,
+        "y": 648.5,
+        "width": 252.671875,
+        "height": 74
+      }
+    },
+    {
+      "id": "17-recording",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 296,
+          "y": 56,
+          "width": 125.625,
+          "height": 29,
+          "n": 1,
+          "description": "Stop and save"
+        },
+        {
+          "x": 430.625,
+          "y": 56,
+          "width": 116.78125,
+          "height": 29,
+          "n": 2,
+          "description": "Recording status and input level"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/17-recording.png",
+      "displayCrop": {
+        "x": 276,
+        "y": 36,
+        "width": 291.40625,
+        "height": 69
+      }
+    },
+    {
+      "id": "18-audio",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 622,
+          "y": 501.5,
+          "width": 300,
+          "height": 54,
+          "n": 1,
+          "description": "Saved WAV player"
+        },
+        {
+          "x": 606,
+          "y": 651.5,
+          "width": 114,
+          "height": 29,
+          "n": 2,
+          "description": "Transcription provider"
+        },
+        {
+          "x": 935,
+          "y": 651.5,
+          "width": 80.28125,
+          "height": 29,
+          "n": 3,
+          "description": "Transcribe when prerequisites are ready"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/18-audio.png",
+      "displayCrop": {
+        "x": 586,
+        "y": 481.5,
+        "width": 449.28125,
+        "height": 219
+      }
+    },
+    {
+      "id": "19-transcription-unavailable",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 606,
+          "y": 595.5,
+          "width": 622,
+          "height": 40,
+          "n": 1,
+          "description": "Runtime prerequisite explanation"
+        },
+        {
+          "x": 935,
+          "y": 651.5,
+          "width": 80.28125,
+          "height": 29,
+          "n": 2,
+          "description": "Disabled until ready"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/19-transcription-unavailable.png",
+      "displayCrop": {
+        "x": 586,
+        "y": 575.5,
+        "width": 662,
+        "height": 125
+      }
+    },
+    {
+      "id": "20-appearance",
+      "width": 1144,
+      "height": 735,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Appearance",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 241,
+          "width": 710.40625,
+          "height": 35
+        },
+        {
+          "n": 2,
+          "description": "Layout density",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 313,
+          "width": 710.40625,
+          "height": 35
+        },
+        {
+          "n": 3,
+          "description": "Back to workspace",
+          "shape": "rect",
+          "x": 899.75,
+          "y": 42,
+          "width": 143.453125,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "21-models",
+      "width": 696,
+      "height": 563,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Local API key field",
+          "shape": "rect",
+          "x": 18.796875,
+          "y": 154.5,
+          "width": 659.40625,
+          "height": 36
+        },
+        {
+          "n": 2,
+          "description": "Save key",
+          "shape": "rect",
+          "x": 18.796875,
+          "y": 205.5,
+          "width": 80.265625,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Tiny model and Download",
+          "shape": "rect",
+          "x": 0.796875,
+          "y": 356,
+          "width": 695.40625,
+          "height": 75
+        },
+        {
+          "n": 4,
+          "description": "Base model and Download",
+          "shape": "rect",
+          "x": 0.796875,
+          "y": 439,
+          "width": 695.40625,
+          "height": 75
+        }
+      ]
+    },
+    {
+      "id": "22-model-download",
+      "width": 696,
+      "height": 563,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Actual download state",
+          "shape": "rect",
+          "x": 0.796875,
+          "y": 356,
+          "width": 695.40625,
+          "height": 95
+        }
+      ]
+    },
+    {
+      "id": "23-maintenance",
+      "width": 1144,
+      "height": 735,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Back up library",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 288.5,
+          "width": 118.546875,
+          "height": 34
+        },
+        {
+          "n": 2,
+          "description": "Asset scan",
+          "shape": "rect",
+          "x": 458.34375,
+          "y": 288.5,
+          "width": 203.9375,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Export diagnostics",
+          "shape": "rect",
+          "x": 669.28125,
+          "y": 288.5,
+          "width": 141.390625,
+          "height": 34
+        },
+        {
+          "n": 4,
+          "description": "Scan counts",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 252.5,
+          "width": 710.40625,
+          "height": 20
+        },
+        {
+          "n": 5,
+          "description": "Actual job history",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 346.5,
+          "width": 710.40625,
+          "height": 57
+        }
+      ]
+    },
+    {
+      "id": "24-cloud-unavailable",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 606,
+          "y": 804.5,
+          "width": 114,
+          "height": 29,
+          "n": 1,
+          "description": "OpenRouter provider"
+        },
+        {
+          "x": 606,
+          "y": 768.5,
+          "width": 622,
+          "height": 20,
+          "n": 2,
+          "description": "Missing-key explanation"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/24-cloud-unavailable.png",
+      "displayCrop": {
+        "x": 586,
+        "y": 748.5,
+        "width": 662,
+        "height": 85.5
+      }
+    },
+    {
+      "id": "25-jobs",
+      "width": 600,
+      "height": 187,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Actual statuses and Retry controls",
+          "shape": "rect",
+          "x": 23,
+          "y": 107.40625,
+          "width": 554,
+          "height": 57
+        }
+      ]
+    },
+    {
+      "id": "26-diagnostics",
+      "width": 600,
+      "height": 730,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Process filter",
+          "shape": "rect",
+          "x": 23,
+          "y": 212.65625,
+          "width": 125,
+          "height": 24
+        },
+        {
+          "n": 2,
+          "description": "Severity filter",
+          "shape": "rect",
+          "x": 148,
+          "y": 212.65625,
+          "width": 119,
+          "height": 24
+        },
+        {
+          "n": 3,
+          "description": "Category filter",
+          "shape": "rect",
+          "x": 23,
+          "y": 236.65625,
+          "width": 554,
+          "height": 36
+        },
+        {
+          "n": 4,
+          "description": "Export diagnostics",
+          "shape": "rect",
+          "x": 129.921875,
+          "y": 178.65625,
+          "width": 141.390625,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "Show full detail",
+          "shape": "rect",
+          "x": 23,
+          "y": 312.65625,
+          "width": 108.046875,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "27-page-actions",
+      "width": 190,
+      "height": 85,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Export page",
+          "shape": "rect",
+          "x": 6,
+          "y": 6,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 2,
+          "description": "Move page to trash",
+          "shape": "rect",
+          "x": 6,
+          "y": 47,
+          "width": 178,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "28-export",
+      "width": 600,
+      "height": 236,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Scope",
+          "shape": "rect",
+          "x": 23,
+          "y": 128.90625,
+          "width": 554,
+          "height": 35
+        },
+        {
+          "n": 2,
+          "description": "markdown",
+          "shape": "rect",
+          "x": 23,
+          "y": 178.90625,
+          "width": 90.34375,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "pdf",
+          "shape": "rect",
+          "x": 120.34375,
+          "y": 178.90625,
+          "width": 45.28125,
+          "height": 34
+        },
+        {
+          "n": 4,
+          "description": "lossless json",
+          "shape": "rect",
+          "x": 172.625,
+          "y": 178.90625,
+          "width": 105.140625,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "ai context",
+          "shape": "rect",
+          "x": 284.765625,
+          "y": 178.90625,
+          "width": 85.65625,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "29-backup-complete",
+      "width": 600,
+      "height": 559,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Actual backup job status",
+          "shape": "rect",
+          "x": 23,
+          "y": 107.40625,
+          "width": 554,
+          "height": 57
+        }
+      ]
+    },
+    {
+      "id": "30-imported",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 440,
+          "y": 140,
+          "width": 685.21875,
+          "height": 51,
+          "n": 1,
+          "description": "Imported page opens immediately"
+        },
+        {
+          "x": 452,
+          "y": 238.5,
+          "width": 682.84375,
+          "height": 24,
+          "n": 2,
+          "description": "Imported note title"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/30-imported.png"
+    },
+    {
+      "id": "31-page-trash",
+      "width": 600,
+      "height": 220,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Page and descendants",
+          "shape": "rect",
+          "x": 23,
+          "y": 139.65625,
+          "width": 554,
+          "height": 57
+        },
+        {
+          "n": 2,
+          "description": "Restore",
+          "shape": "rect",
+          "x": 451.171875,
+          "y": 153.15625,
+          "width": 62.390625,
+          "height": 29
+        },
+        {
+          "n": 3,
+          "description": "Permanent delete",
+          "shape": "rect",
+          "x": 521.5625,
+          "y": 153.15625,
+          "width": 55.4375,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "32-search",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 478.125,
+          "y": 374.90625,
+          "width": 508.875,
+          "height": 36,
+          "n": 1,
+          "description": "Search stored titles and block text"
+        },
+        {
+          "x": 443,
+          "y": 424.90625,
+          "width": 554,
+          "height": 19.5,
+          "n": 2,
+          "description": "Distinct no-match state"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/32-search.png",
+      "displayCrop": {
+        "x": 423,
+        "y": 354.90625,
+        "width": 594,
+        "height": 109.5
+      }
+    },
+    {
+      "id": "33-pagination",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Load more notes",
+          "shape": "rect",
+          "x": 796.0625,
+          "y": 705,
+          "width": 128.875,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "34-storage",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 646.796875,
+          "y": 425,
+          "width": 674.40625,
+          "height": 17,
+          "n": 1,
+          "description": "Active library"
+        },
+        {
+          "x": 646.796875,
+          "y": 457,
+          "width": 674.40625,
+          "height": 35,
+          "n": 2,
+          "description": "B, KB, MB and GB sizes"
+        },
+        {
+          "x": 646.796875,
+          "y": 628,
+          "width": 114.40625,
+          "height": 34,
+          "n": 3,
+          "description": "Move library"
+        },
+        {
+          "x": 628.796875,
+          "y": 338,
+          "width": 123.84375,
+          "height": 34,
+          "n": 4,
+          "description": "Refresh storage scan"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/34-storage.png",
+      "displayCrop": {
+        "x": 608.796875,
+        "y": 318,
+        "width": 732.40625,
+        "height": 364
+      }
+    },
+    {
+      "id": "35-restart-required",
+      "width": 960,
+      "height": 574,
+      "markers": [
+        {
+          "x": 599,
+          "y": 12,
+          "width": 99.109375,
+          "height": 34,
+          "n": 1,
+          "description": "Restart now activates the verified destination"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 960,
+          "height": 58,
+          "n": 2,
+          "description": "Persistent editing restriction"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/35-restart-required.png",
+      "displayCrop": {
+        "x": 0,
+        "y": 0,
+        "width": 960,
+        "height": 78
+      }
+    },
+    {
+      "id": "36-remove-original",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 646.796875,
+          "y": 676,
+          "width": 674.40625,
+          "height": 29,
+          "n": 1,
+          "description": "Original removal is available after destination activation"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/36-remove-original.png",
+      "displayCrop": {
+        "x": 626.796875,
+        "y": 656,
+        "width": 714.40625,
+        "height": 69
+      }
+    },
+    {
+      "id": "37-storage-after-removal",
+      "width": 1144,
+      "height": 778,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Active relocated library",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 220,
+          "width": 710.40625,
+          "height": 122
+        }
+      ]
+    },
+    {
+      "id": "38-source-switch",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 314,
+          "y": 171.5,
+          "width": 130,
+          "height": 31,
+          "n": 1,
+          "description": "Selected comparison source"
+        },
+        {
+          "x": 314,
+          "y": 129,
+          "width": 132.71875,
+          "height": 20,
+          "n": 2,
+          "description": "Selected source title"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/38-source-switch.png",
+      "displayCrop": {
+        "x": 294,
+        "y": 109,
+        "width": 172.71875,
+        "height": 113.5
+      }
+    },
+    {
+      "id": "39-installed-models",
+      "width": 704,
+      "height": 254,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Installed Tiny model",
+          "x": 4.796875,
+          "y": 4,
+          "width": 695.40625,
+          "height": 75
+        },
+        {
+          "n": 2,
+          "description": "Use as default",
+          "x": 509.84375,
+          "y": 27,
+          "width": 100.78125,
+          "height": 29
+        },
+        {
+          "n": 3,
+          "description": "Remove nondefault model",
+          "x": 617.625,
+          "y": 27,
+          "width": 64.578125,
+          "height": 29
+        },
+        {
+          "n": 4,
+          "description": "Current Base default",
+          "x": 622.296875,
+          "y": 110,
+          "width": 59.90625,
+          "height": 29
+        }
+      ],
+      "displayCrop": {
+        "x": 0,
+        "y": 0,
+        "width": 704,
+        "height": 166
+      }
+    },
+    {
+      "id": "41-model-default",
+      "width": 704,
+      "height": 254,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Tiny default",
+          "x": 622.296875,
+          "y": 27,
+          "width": 59.90625,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Remove Base model",
+          "x": 617.625,
+          "y": 110,
+          "width": 64.578125,
+          "height": 29
+        }
+      ],
+      "displayCrop": {
+        "x": 0,
+        "y": 0,
+        "width": 704,
+        "height": 166
+      }
+    },
+    {
+      "id": "42-model-removed",
+      "width": 704,
+      "height": 83,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Base model removed",
+          "x": 4.796875,
+          "y": 4,
+          "width": 695.40625,
+          "height": 75
+        },
+        {
+          "n": 2,
+          "description": "Download again",
+          "x": 605.828125,
+          "y": 27,
+          "width": 76.375,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "40-key-controls",
+      "width": 704,
+      "height": 218,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Replace API key field",
+          "x": 22.796875,
+          "y": 110.5,
+          "width": 659.40625,
+          "height": 36
+        },
+        {
+          "n": 2,
+          "description": "Replace key",
+          "x": 22.796875,
+          "y": 161.5,
+          "width": 100.203125,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Remove key",
+          "x": 130,
+          "y": 161.5,
+          "width": 99.953125,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "43-note-actions",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 452,
+          "y": 238.5,
+          "width": 697.84375,
+          "height": 24,
+          "n": 1,
+          "description": "Edit note title"
+        },
+        {
+          "x": 1157.84375,
+          "y": 236,
+          "width": 126.15625,
+          "height": 29,
+          "n": 2,
+          "description": "Move note to trash"
+        },
+        {
+          "x": 49,
+          "y": 75,
+          "width": 174.53125,
+          "height": 18,
+          "n": 3,
+          "description": "Filter notebook and page titles"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/43-note-actions.png"
+    },
+    {
+      "id": "44-text-region",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 314,
+          "y": 223,
+          "width": 51.1875,
+          "height": 34,
+          "n": 1,
+          "description": "Text mode is the default"
+        },
+        {
+          "x": 371.1875,
+          "y": 223,
+          "width": 67.40625,
+          "height": 34,
+          "n": 2,
+          "description": "Region capture mode"
+        },
+        {
+          "x": 444.59375,
+          "y": 230,
+          "width": 200.359375,
+          "height": 20,
+          "n": 3,
+          "description": "Explicit receiving note"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/44-text-region.png",
+      "displayCrop": {
+        "x": 294,
+        "y": 203,
+        "width": 370.953125,
+        "height": 74
+      }
+    },
+    {
+      "id": "45-minimum-window",
+      "width": 960,
+      "height": 574,
+      "markers": [
+        {
+          "x": 254,
+          "y": 220,
+          "width": 51.1875,
+          "height": 34,
+          "n": 1,
+          "description": "Text mode"
+        },
+        {
+          "x": 322.765625,
+          "y": 351.5,
+          "width": 42,
+          "height": 27,
+          "n": 2,
+          "description": "Page controls"
+        },
+        {
+          "x": 339.140625,
+          "y": 428,
+          "width": 111.65625,
+          "height": 29,
+          "n": 3,
+          "description": "Capture controls"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/45-minimum-window.png"
+    },
+    {
+      "id": "46-save-retry",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 296,
+          "y": 56,
+          "width": 101.25,
+          "height": 29,
+          "n": 1,
+          "description": "Retry the retained WAV"
+        },
+        {
+          "x": 296,
+          "y": 85,
+          "width": 1144,
+          "height": 43,
+          "n": 2,
+          "description": "Save failure explanation"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/46-save-retry.png",
+      "displayCrop": {
+        "x": 276,
+        "y": 36,
+        "width": 1164,
+        "height": 112
+      }
+    },
+    {
+      "id": "47-trash-confirmation",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 443,
+          "y": 470.40625,
+          "width": 68.140625,
+          "height": 34,
+          "n": 1,
+          "description": "Cancel is the default"
+        },
+        {
+          "x": 518.140625,
+          "y": 470.40625,
+          "width": 146.375,
+          "height": 34,
+          "n": 2,
+          "description": "Irreversible deletion"
+        },
+        {
+          "x": 443,
+          "y": 414.40625,
+          "width": 554,
+          "height": 40,
+          "n": 3,
+          "description": "Item and descendant warning"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/47-trash-confirmation.png",
+      "displayCrop": {
+        "x": 423,
+        "y": 394.40625,
+        "width": 594,
+        "height": 130
+      }
+    },
+    {
+      "id": "48-media-preview",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 993.71875,
+          "y": 556.5,
+          "width": 286,
+          "height": 55,
+          "n": 1,
+          "description": "Viewport-loaded cached preview"
+        },
+        {
+          "x": 993.71875,
+          "y": 615.5,
+          "width": 131.8125,
+          "height": 29,
+          "n": 2,
+          "description": "Load full original only when requested"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/48-media-preview.png",
+      "displayCrop": {
+        "x": 973.71875,
+        "y": 536.5,
+        "width": 326,
+        "height": 128
+      }
+    },
+    {
+      "id": "49-external-disclosure",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "x": 606,
+          "y": 804.5,
+          "width": 114,
+          "height": 29,
+          "n": 1,
+          "description": "External provider choice"
+        },
+        {
+          "x": 606,
+          "y": 748.5,
+          "width": 622,
+          "height": 40,
+          "n": 2,
+          "description": "Explicit transfer and charges disclosure"
+        }
+      ],
+      "originalPath": "captures/2026-10-05-reliability/originals/49-external-disclosure.png",
+      "displayCrop": {
+        "x": 586,
+        "y": 728.5,
+        "width": 662,
+        "height": 105.5
+      }
+    }
+  ],
+  "observations": [
+    "Local transcription attempted; runtime is absent in this source build. No transcript success claimed.",
+    "OpenRouter attempted without a key; no external audio request or charges authorized.",
+    "Export completed: markdown / notebook",
+    "Export completed: pdf / page",
+    "Export completed: lossless json / notebook",
+    "Export completed: ai context / note",
+    "Imported saved synthetic WAV using Attach audio; Ctrl+Shift+N created a note.",
+    "Lossless import completed; reload required to refresh sidebar.",
+    "Notebook cascade move-to-trash and restoration exercised.",
+    "Load more notes exercised with 51 bridge-seeded demo notes; 50 then 51 displayed.",
+    "Library move, application restart, new library activation and original removal exercised in isolated demo only.",
+    "Imported a second nonprivate PDF copy, switched to it and back using Source document; actual selected second-source state captured.",
+    "Installed and checksum-verified Tiny and Base through actual downloads; changed default Base→Tiny; confirmed and removed the nondefault Base model. Local runtime remains absent.",
+    "Saved, replaced and removed a dummy local key. No provider authentication or external audio request was made."
+  ],
+  "updatedAt": "2026-10-05T18:44:23.956Z",
+  "reliabilityBuild": {
+    "version": "0.1.0",
+    "buildSha256": "e62c82b4ae01ccde8f2cb873a81fa7a324b811e8642a34ead1e281989924c16b",
+    "revision": "ae1dddb4d0ca5367eb0f02a1e9812aa884922d1c",
+    "workingTree": true,
+    "captureDate": "2026-10-05",
+    "platform": "linux"
+  }
+}

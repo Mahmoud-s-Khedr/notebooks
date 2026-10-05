@@ -1,0 +1,245 @@
+{
+  "initialRegressions": [
+    {
+      "scenario": "pdf-recording",
+      "metric": "resizeMs",
+      "before": 92,
+      "after": 139,
+      "percent": 51.1,
+      "overBudget": true
+    }
+  ],
+  "beforeInteractions": [
+    {
+      "pdfZoomMs": 213,
+      "resizeMs": 100,
+      "recordingFrameP95Ms": 18.100000001490116,
+      "recordingSaveMs": 291
+    },
+    {
+      "pdfZoomMs": 107,
+      "resizeMs": 91,
+      "recordingFrameP95Ms": 18.69999999552965,
+      "recordingSaveMs": 316
+    },
+    {
+      "pdfZoomMs": 92,
+      "resizeMs": 91,
+      "recordingFrameP95Ms": 18.799999997019768,
+      "recordingSaveMs": 297
+    },
+    {
+      "pdfZoomMs": 93,
+      "resizeMs": 92,
+      "recordingFrameP95Ms": 18.799999997019768,
+      "recordingSaveMs": 290
+    },
+    {
+      "pdfZoomMs": 87,
+      "resizeMs": 103,
+      "recordingFrameP95Ms": 18.400000005960464,
+      "recordingSaveMs": 301
+    }
+  ],
+  "afterInteractions": [
+    {
+      "pdfZoomMs": 258,
+      "resizeMs": 161,
+      "recordingFrameP95Ms": 18.599999994039536,
+      "recordingSaveMs": 323
+    },
+    {
+      "pdfZoomMs": 107,
+      "resizeMs": 113,
+      "recordingFrameP95Ms": 18.799999997019768,
+      "recordingSaveMs": 317
+    },
+    {
+      "pdfZoomMs": 105,
+      "resizeMs": 134,
+      "recordingFrameP95Ms": 18.200000002980232,
+      "recordingSaveMs": 304
+    },
+    {
+      "pdfZoomMs": 107,
+      "resizeMs": 143,
+      "recordingFrameP95Ms": 18.599999994039536,
+      "recordingSaveMs": 287
+    },
+    {
+      "pdfZoomMs": 106,
+      "resizeMs": 139,
+      "recordingFrameP95Ms": 18.5,
+      "recordingSaveMs": 321
+    }
+  ],
+  "finding": "The original Zoom in clamps to 210% even when fit zoom is greater; the corrected viewer preserves a higher fit zoom. Thus alternating zoom can resize different canvas areas. This is an inference from the original and current handlers. Final comparisons normalize both viewers to 180\u2013190% before interaction sampling; original measurements are retained here.",
+  "normalizedResizeRegression": {
+    "beforeMs": 96,
+    "afterMs": 141,
+    "percent": 46.9
+  },
+  "resizeDiagnostics": {
+    "before": {
+      "appRoot": "/tmp/notebook-before-build",
+      "samples": [
+        {
+          "harnessMs": 93,
+          "eventToFrameMs": 0.10000000149011612,
+          "LayoutDurationMs": 35.226,
+          "RecalcStyleDurationMs": 23.571,
+          "ScriptDurationMs": 1.338,
+          "TaskDurationMs": 89.681
+        },
+        {
+          "harnessMs": 91,
+          "eventToFrameMs": 0.09999999403953552,
+          "LayoutDurationMs": 33.721,
+          "RecalcStyleDurationMs": 23.855999999999995,
+          "ScriptDurationMs": 1.0399999999999998,
+          "TaskDurationMs": 90.10799999999999
+        },
+        {
+          "harnessMs": 94,
+          "eventToFrameMs": 0.10000000149011612,
+          "LayoutDurationMs": 36.68700000000001,
+          "RecalcStyleDurationMs": 25.095000000000006,
+          "ScriptDurationMs": 0.97,
+          "TaskDurationMs": 93.524
+        },
+        {
+          "harnessMs": 101,
+          "eventToFrameMs": 0.10000000149011612,
+          "LayoutDurationMs": 36.200999999999986,
+          "RecalcStyleDurationMs": 25.779999999999998,
+          "ScriptDurationMs": 0.8020000000000002,
+          "TaskDurationMs": 115.54799999999999
+        },
+        {
+          "harnessMs": 87,
+          "eventToFrameMs": 0,
+          "LayoutDurationMs": 26.59800000000001,
+          "RecalcStyleDurationMs": 25.260000000000005,
+          "ScriptDurationMs": 1.0740000000000003,
+          "TaskDurationMs": 96.03200000000001
+        }
+      ],
+      "medians": {
+        "harnessMs": 93,
+        "eventToFrameMs": 0.10000000149011612,
+        "LayoutDurationMs": 35.226,
+        "RecalcStyleDurationMs": 25.095000000000006,
+        "ScriptDurationMs": 1.0399999999999998,
+        "TaskDurationMs": 93.524
+      }
+    },
+    "after": {
+      "appRoot": "/home/mk/Projects/CV_projects/notebooks",
+      "samples": [
+        {
+          "harnessMs": 144,
+          "eventToFrameMs": 0,
+          "LayoutDurationMs": 35.772999999999996,
+          "RecalcStyleDurationMs": 60.163000000000004,
+          "ScriptDurationMs": 1.0070000000000001,
+          "TaskDurationMs": 139.47799999999998
+        },
+        {
+          "harnessMs": 136,
+          "eventToFrameMs": 0,
+          "LayoutDurationMs": 35.804,
+          "RecalcStyleDurationMs": 50.368,
+          "ScriptDurationMs": 0.8319999999999999,
+          "TaskDurationMs": 152.04800000000003
+        },
+        {
+          "harnessMs": 127,
+          "eventToFrameMs": 0.10000000149011612,
+          "LayoutDurationMs": 30.010999999999996,
+          "RecalcStyleDurationMs": 49.410999999999994,
+          "ScriptDurationMs": 1.1480000000000001,
+          "TaskDurationMs": 136.61800000000002
+        },
+        {
+          "harnessMs": 121,
+          "eventToFrameMs": 0,
+          "LayoutDurationMs": 26.92599999999999,
+          "RecalcStyleDurationMs": 49.679,
+          "ScriptDurationMs": 0.8509999999999998,
+          "TaskDurationMs": 119.695
+        },
+        {
+          "harnessMs": 116,
+          "eventToFrameMs": 0,
+          "LayoutDurationMs": 27.477,
+          "RecalcStyleDurationMs": 44.52899999999998,
+          "ScriptDurationMs": 0.8470000000000001,
+          "TaskDurationMs": 115.19799999999991
+        }
+      ],
+      "medians": {
+        "harnessMs": 127,
+        "eventToFrameMs": 0,
+        "LayoutDurationMs": 30.010999999999996,
+        "RecalcStyleDurationMs": 49.679,
+        "ScriptDurationMs": 0.8509999999999998,
+        "TaskDurationMs": 136.61800000000002
+      }
+    }
+  },
+  "styleInvestigation": "CDP deltas show median style recalculation 25.095\u219249.679ms, layout 35.226\u219230.011ms, JavaScript 1.040\u21920.851ms. The renderer imported the complete PDF.js viewer stylesheet, including unused root variables/editor UI. The final build uses the upstream core text-layer rules with license/version attribution; real Electron selection is rechecked.",
+  "finalResizeDiagnostics": {
+    "appRoot": "/home/mk/Projects/CV_projects/notebooks",
+    "samples": [
+      {
+        "harnessMs": 122,
+        "eventToFrameMs": 0,
+        "LayoutDurationMs": 41.637,
+        "RecalcStyleDurationMs": 29.862,
+        "ScriptDurationMs": 1.46,
+        "TaskDurationMs": 115.262
+      },
+      {
+        "harnessMs": 118,
+        "eventToFrameMs": 0,
+        "LayoutDurationMs": 44.721000000000004,
+        "RecalcStyleDurationMs": 30.125,
+        "ScriptDurationMs": 1.02,
+        "TaskDurationMs": 132.973
+      },
+      {
+        "harnessMs": 102,
+        "eventToFrameMs": 0,
+        "LayoutDurationMs": 32.33599999999999,
+        "RecalcStyleDurationMs": 28.797000000000004,
+        "ScriptDurationMs": 1.262,
+        "TaskDurationMs": 114.25300000000004
+      },
+      {
+        "harnessMs": 85,
+        "eventToFrameMs": 0,
+        "LayoutDurationMs": 29.48400000000001,
+        "RecalcStyleDurationMs": 27.401999999999997,
+        "ScriptDurationMs": 0.9289999999999997,
+        "TaskDurationMs": 94.71000000000002
+      },
+      {
+        "harnessMs": 93,
+        "eventToFrameMs": 0,
+        "LayoutDurationMs": 29.189999999999994,
+        "RecalcStyleDurationMs": 26.491,
+        "ScriptDurationMs": 0.8380000000000002,
+        "TaskDurationMs": 91.77600000000002
+      }
+    ],
+    "medians": {
+      "harnessMs": 102,
+      "eventToFrameMs": 0,
+      "LayoutDurationMs": 32.33599999999999,
+      "RecalcStyleDurationMs": 28.797000000000004,
+      "ScriptDurationMs": 1.02,
+      "TaskDurationMs": 114.25300000000004
+    }
+  },
+  "finalRegressions": []
+}

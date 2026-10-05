@@ -17,7 +17,14 @@ const pdf = vi.hoisted(() => {
   return { renderPage, getPage, getDocument }
 })
 
-vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: pdf.getDocument }))
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: {},
+  getDocument: pdf.getDocument,
+  TextLayer: class {
+    render = () => Promise.resolve()
+    cancel = () => undefined
+  }
+}))
 
 import { SourceWorkspace } from './SourceWorkspace'
 import {
@@ -135,6 +142,7 @@ describe('SourceWorkspace core source-capture workflow', () => {
         {...callbacks()}
       />
     )
+    await user.click(screen.getByRole('button', { name: 'Region' }))
     const stage = await screen.findByLabelText('PDF page. Drag to capture an image region.')
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Selected PDF text' })).toHaveValue('Fixture PDF text page 1')
@@ -218,5 +226,89 @@ describe('SourceWorkspace core source-capture workflow', () => {
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Media import failed' }))
     )
+  })
+})
+
+describe('PDF interaction regression', () => {
+  it('preserves edited text through zoom, clamps committed pages and clears printed provenance on page changes', async () => {
+    const api = installResearchNotebookApi()
+    api.sources.list.mockResolvedValue([source()])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    const user = userEvent.setup()
+    render(
+      <SourceWorkspace
+        notebookId="notebook-1"
+        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
+        activeNoteId="note-1"
+        {...callbacks()}
+      />
+    )
+    const text = await screen.findByRole('textbox', { name: 'Selected PDF text' })
+    await waitFor(() => expect(text).toHaveValue('Fixture PDF text page 1'))
+    await user.clear(text)
+    await user.type(text, 'Edited evidence')
+    await user.click(screen.getByRole('button', { name: 'Zoom in' }))
+    expect(text).toHaveValue('Edited evidence')
+    const input = screen.getByLabelText('PDF page')
+    fireEvent.change(input, { target: { value: '999' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(input).toHaveValue(2))
+    fireEvent.change(screen.getByLabelText('Printed page'), { target: { value: '77' } })
+    await user.click(screen.getByRole('button', { name: 'Previous page' }))
+    expect(screen.getByLabelText('Printed page')).toHaveValue(null)
+    expect(screen.getByRole('button', { name: 'Text' })).toHaveAttribute('aria-pressed', 'true')
+  })
+  it('disables capture without an explicit receiving note', async () => {
+    const api = installResearchNotebookApi()
+    api.sources.list.mockResolvedValue([source()])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    render(
+      <SourceWorkspace
+        notebookId="notebook-1"
+        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
+        activeNoteId={null}
+        {...callbacks()}
+      />
+    )
+    expect(await screen.findByRole('button', { name: 'Capture text' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Attach media' })).toBeDisabled()
+    expect(screen.getByText('Capture to: Select a note to capture')).toBeVisible()
+  })
+})
+
+describe('source navigation consumption', () => {
+  it('applies provenance once and then permits manual source switching after import', async () => {
+    const api = installResearchNotebookApi()
+    const first = source()
+    const second = source({ id: 'source-2', assetId: 'asset-2', title: 'Comparison' })
+    api.sources.list.mockResolvedValue([first])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    const user = userEvent.setup()
+    render(
+      <SourceWorkspace
+        navigation={{
+          id: 'provenance',
+          blockId: 'block-1',
+          sourceDocumentId: first.id,
+          pdfPage: 1,
+          printedPage: 17,
+          selectionType: 'text',
+          bounds: null,
+          extractedText: 'Recorded evidence',
+          createdAt: '2026-10-05'
+        }}
+        notebookId="notebook-1"
+        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
+        activeNoteId="note-1"
+        {...callbacks()}
+      />
+    )
+    await waitFor(() => expect(screen.getByLabelText('Printed page')).toHaveValue(17))
+    api.sources.list.mockResolvedValue([first, second])
+    await user.click(screen.getByRole('button', { name: 'Import' }))
+    await screen.findByRole('option', { name: 'Comparison' })
+    await user.selectOptions(screen.getByLabelText('Source document'), 'source-2')
+    await waitFor(() => expect(screen.getByLabelText('Source document')).toHaveValue('source-2'))
+    expect(screen.getByLabelText('Printed page')).toHaveValue(null)
   })
 })

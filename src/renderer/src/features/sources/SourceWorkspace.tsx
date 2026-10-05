@@ -11,6 +11,7 @@ import {
   Upload
 } from 'lucide-react'
 import * as pdfjs from 'pdfjs-dist'
+import './pdf-text-layer.css'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import jbig2WasmUrl from 'pdfjs-dist/wasm/jbig2.wasm?url'
 import jbig2NoWasmFallbackUrl from 'pdfjs-dist/wasm/jbig2_nowasm_fallback.js?url'
@@ -19,7 +20,7 @@ import openJpegNoWasmFallbackUrl from 'pdfjs-dist/wasm/openjpeg_nowasm_fallback.
 import qcmsWasmUrl from 'pdfjs-dist/wasm/qcms_bg.wasm?url'
 import quickJsLoaderUrl from 'pdfjs-dist/wasm/quickjs-eval.js?url'
 import quickJsWasmUrl from 'pdfjs-dist/wasm/quickjs-eval.wasm?url'
-import type { AssetKind, PageWorkspace, SourceDocument } from '../../../../shared/domain'
+import type { BlockSource, AssetKind, PageWorkspace, SourceDocument } from '../../../../shared/domain'
 import { Button, DropdownMenu } from '../../components/ui'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -43,16 +44,18 @@ if (!pdfjsWasmUrls.every((url) => url.startsWith(pdfjsWasmUrl))) {
 }
 
 type Props = {
+  navigation?: BlockSource | null
   notebookId: string | null
   workspace: PageWorkspace | null
   activeNoteId: string | null
-  onSaved: () => Promise<void>
+  onSaved: (activateId?: string) => Promise<void>
   onError: (error: unknown) => void
   onUtilities: (kind: 'settings' | 'diagnostics' | 'export' | 'jobs') => void
 }
 type Rectangle = { x: number; y: number; width: number; height: number }
 
 export function SourceWorkspace({
+  navigation,
   notebookId,
   workspace,
   activeNoteId,
@@ -64,6 +67,8 @@ export function SourceWorkspace({
   const [source, setSource] = useState<SourceDocument | null>(null)
   const [url, setUrl] = useState('')
   const [page, setPage] = useState(1)
+  const [pageInput, setPageInput] = useState('1')
+  const [interaction, setInteraction] = useState<'text' | 'region'>('text')
   const [pageCount, setPageCount] = useState(0)
   // A null zoom follows the available pane width. Once the reader changes the
   // zoom controls, it becomes an explicit scale and is left alone.
@@ -72,42 +77,80 @@ export function SourceWorkspace({
   const [printedPage, setPrintedPage] = useState('')
   const [selection, setSelection] = useState('')
   const [region, setRegion] = useState<Rectangle | null>(null)
-  const noteId = activeNoteId ?? workspace?.notes[0]?.id
+  const noteId = activeNoteId
+  const destination = workspace?.notes.find((n) => n.id === noteId)
+  const appliedNavigation = useRef<BlockSource | null>(null)
+  const sourceRequest = useRef(0)
+  const captureContext = useRef('')
+  useEffect(() => {
+    captureContext.current = `${source?.id}:${page}:${noteId}`
+  }, [source?.id, page, noteId])
   const refresh = useCallback(async () => {
+    const token = ++sourceRequest.current
     if (!notebookId) {
       setSources([])
       setSource(null)
       return
     }
     const next = await window.researchNotebook.sources.list({ notebookId })
+    if (token !== sourceRequest.current) return
     setSources(next)
     setSource((current) => (current && next.some(({ id }) => id === current.id) ? current : (next[0] ?? null)))
   }, [notebookId])
+  const invalidateSources = useCallback(() => {
+    ++sourceRequest.current
+  }, [])
   useEffect(() => {
     void refresh().catch(onError)
-  }, [refresh, onError])
+    return invalidateSources
+  }, [refresh, onError, invalidateSources])
   useEffect(() => {
-    if (!source) {
-      setUrl('')
-      return
+    let alive = true
+    setUrl('')
+    if (source)
+      void window.researchNotebook.assets
+        .dataUrl({ assetId: source.assetId })
+        .then((value) => {
+          if (alive) setUrl(value)
+        })
+        .catch((value) => {
+          if (alive) onError(value)
+        })
+    return () => {
+      alive = false
     }
-    void window.researchNotebook.assets.dataUrl({ assetId: source.assetId }).then(setUrl).catch(onError)
   }, [source, onError])
   useEffect(() => {
     setZoom(null)
   }, [url])
   useEffect(() => {
-    const open = (event: Event) => {
-      const detail = (event as CustomEvent<{ sourceDocumentId: string; pdfPage: number | null }>).detail
-      const next = sources.find(({ id }) => id === detail.sourceDocumentId)
-      if (next) {
-        setSource(next)
-        setPage(detail.pdfPage ?? 1)
-      }
+    if (!navigation || appliedNavigation.current === navigation) return
+    const next = sources.find((s) => s.id === navigation.sourceDocumentId)
+    if (next) {
+      appliedNavigation.current = navigation
+      setSource(next)
+      setPage(navigation.pdfPage ?? 1)
     }
-    window.addEventListener('research-notebook:open-source', open)
-    return () => window.removeEventListener('research-notebook:open-source', open)
-  }, [sources])
+  }, [navigation, sources])
+  useEffect(() => {
+    setPageInput(String(page))
+    setSelection('')
+    setRegion(null)
+    setPrintedPage(
+      navigation && navigation.sourceDocumentId === source?.id && navigation.pdfPage === page
+        ? String(navigation.printedPage ?? '')
+        : ''
+    )
+  }, [source?.id, page, navigation])
+  const acceptPage = () => {
+    const safe = Math.max(1, Math.min(pageCount || 1, Math.trunc(Number(pageInput)) || 1))
+    setPage(safe)
+    setPageInput(String(safe))
+  }
+  const acceptCount = useCallback((count: number) => {
+    setPageCount(count)
+    if (count) setPage((value) => Math.min(Math.max(1, value), count))
+  }, [])
   const importPdf = async () => {
     if (!notebookId) return
     try {
@@ -119,6 +162,7 @@ export function SourceWorkspace({
   }
   const captureText = async () => {
     if (!noteId || !source || !selection.trim()) return
+    const context = captureContext.current
     try {
       await window.researchNotebook.sources.captureText({
         noteId,
@@ -127,7 +171,7 @@ export function SourceWorkspace({
         printedPage: printedPage ? Number(printedPage) : undefined,
         text: selection
       })
-      setSelection('')
+      if (captureContext.current === context) setSelection('')
       await onSaved()
     } catch (error) {
       onError(error)
@@ -135,22 +179,24 @@ export function SourceWorkspace({
   }
   const createQa = async () => {
     if (!workspace || !source || !selection.trim()) return
+    const context = captureContext.current
     try {
-      await window.researchNotebook.sources.createQaNote({
+      const created = await window.researchNotebook.sources.createQaNote({
         pageId: workspace.id,
         sourceDocumentId: source.id,
         pdfPage: page,
         printedPage: printedPage ? Number(printedPage) : undefined,
         text: selection
       })
-      setSelection('')
-      await onSaved()
+      if (captureContext.current === context) setSelection('')
+      await onSaved(created.id)
     } catch (error) {
       onError(error)
     }
   }
   const captureRegion = async (imageDataUrl: string, bounds: Rectangle) => {
     if (!noteId || !source) return
+    const context = captureContext.current
     try {
       await window.researchNotebook.sources.captureRegion({
         noteId,
@@ -159,7 +205,7 @@ export function SourceWorkspace({
         bounds,
         imageDataUrl
       })
-      setRegion(null)
+      if (captureContext.current === context) setRegion(null)
       await onSaved()
     } catch (error) {
       onError(error)
@@ -168,8 +214,9 @@ export function SourceWorkspace({
   const importAsset = async (kind: AssetKind) => {
     if (!notebookId || !noteId) return
     try {
+      const target = noteId
       const asset = await window.researchNotebook.assets.import({ notebookId, kind })
-      if (asset) await window.researchNotebook.assets.attach({ noteId, assetId: asset.id, type: kind })
+      if (asset) await window.researchNotebook.assets.attach({ noteId: target, assetId: asset.id, type: kind })
       await onSaved()
     } catch (error) {
       onError(error)
@@ -195,7 +242,11 @@ export function SourceWorkspace({
         <select
           aria-label="Source document"
           value={source?.id ?? ''}
-          onChange={(event) => setSource(sources.find(({ id }) => id === event.target.value) ?? null)}
+          onChange={(event) => {
+            setSource(sources.find(({ id }) => id === event.target.value) ?? null)
+            setPage(1)
+            setPageCount(0)
+          }}
         >
           <option value="">{sources.length ? 'Choose a source' : 'No sources yet'}</option>
           {sources.map((item) => (
@@ -225,13 +276,41 @@ export function SourceWorkspace({
           <MoreHorizontal size={17} />
         </Button>
       </div>
+      <div className="source-toolbar" aria-label="Capture mode">
+        <Button
+          variant={interaction === 'text' ? 'primary' : 'secondary'}
+          aria-pressed={interaction === 'text'}
+          onClick={() => {
+            setInteraction('text')
+            setRegion(null)
+          }}
+        >
+          Text
+        </Button>
+        <Button
+          variant={interaction === 'region' ? 'primary' : 'secondary'}
+          aria-pressed={interaction === 'region'}
+          onClick={() => setInteraction('region')}
+        >
+          Region
+        </Button>
+        <span role="status">Capture to: {destination?.title ?? 'Select a note to capture'}</span>
+      </div>
       {url ? (
         <PdfCanvas
+          key={source?.id}
+          initialText={
+            navigation?.sourceDocumentId === source?.id && navigation?.pdfPage === page
+              ? navigation?.extractedText
+              : null
+          }
+          interaction={interaction}
+          canCapture={Boolean(noteId)}
           url={url}
           page={page}
           zoom={zoom}
           onFitZoom={setFitZoom}
-          onPageCount={setPageCount}
+          onPageCount={acceptCount}
           onText={setSelection}
           onRegion={setRegion}
           onCaptureRegion={captureRegion}
@@ -265,8 +344,12 @@ export function SourceWorkspace({
                 type="number"
                 min="1"
                 max={pageCount || undefined}
-                value={page}
-                onChange={(event) => setPage(Math.max(1, Number(event.target.value) || 1))}
+                value={pageInput}
+                onChange={(event) => setPageInput(event.target.value)}
+                onBlur={acceptPage}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') acceptPage()
+                }}
               />{' '}
               <span>of {pageCount || '–'}</span>
             </label>
@@ -284,7 +367,7 @@ export function SourceWorkspace({
               variant="ghost"
               size="icon"
               aria-label="Zoom out"
-              onClick={() => setZoom((value) => Math.max(0.65, (value ?? fitZoom) - 0.1))}
+              onClick={() => setZoom((value) => Math.max(Math.min(0.65, fitZoom / 2), (value ?? fitZoom) - 0.1))}
             >
               <Minus size={16} />
             </Button>
@@ -293,7 +376,7 @@ export function SourceWorkspace({
               variant="ghost"
               size="icon"
               aria-label="Zoom in"
-              onClick={() => setZoom((value) => Math.min(2.1, (value ?? fitZoom) + 0.1))}
+              onClick={() => setZoom((value) => Math.min(Math.max(2.1, fitZoom + 0.5), (value ?? fitZoom) + 0.1))}
             >
               <Plus size={16} />
             </Button>
@@ -317,7 +400,7 @@ export function SourceWorkspace({
             >
               <Scissors size={15} /> Capture text
             </Button>
-            <Button size="sm" disabled={!selection.trim()} onClick={() => void createQa()}>
+            <Button size="sm" disabled={!workspace || !selection.trim()} onClick={() => void createQa()}>
               Create Q&A
             </Button>
           </div>
@@ -334,6 +417,9 @@ export function SourceWorkspace({
 }
 
 function PdfCanvas({
+  initialText,
+  interaction,
+  canCapture,
   url,
   page,
   zoom,
@@ -344,6 +430,9 @@ function PdfCanvas({
   onCaptureRegion,
   region
 }: {
+  initialText?: string | null
+  interaction: 'text' | 'region'
+  canCapture: boolean
   url: string
   page: number
   zoom: number | null
@@ -354,6 +443,9 @@ function PdfCanvas({
   onCaptureRegion: (data: string, bounds: Rectangle) => void
   region: Rectangle | null
 }): ReactElement {
+  const textContainer = useRef<HTMLDivElement>(null)
+  const [textContent, setTextContent] = useState<Awaited<ReturnType<pdfjs.PDFPageProxy['getTextContent']>> | null>(null)
+  const textCache = useRef(new Map<number, Promise<Awaited<ReturnType<pdfjs.PDFPageProxy['getTextContent']>>>>())
   const canvas = useRef<HTMLCanvasElement>(null)
   const wrapper = useRef<HTMLDivElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
@@ -384,6 +476,8 @@ function PdfCanvas({
     setLoading(true)
     setError(null)
     setDoc(null)
+    textCache.current.clear()
+    setTextContent(null)
     setPageWidth(0)
     onPageCount(0)
     void loadingTask.promise
@@ -411,7 +505,31 @@ function PdfCanvas({
   useEffect(() => {
     if (!doc) return
     let active = true
+    const safe = Math.max(1, Math.min(page, doc.numPages))
+    let text = textCache.current.get(safe)
+    if (!text) {
+      text = doc.getPage(safe).then((p) => p.getTextContent())
+      textCache.current.set(safe, text)
+    }
+    setTextContent(null)
+    void text
+      .then((content) => {
+        if (!active) return
+        setTextContent(content)
+        onText(initialText ?? content.items.map((item) => ('str' in item ? item.str : '')).join(' '))
+      })
+      .catch((reason) => {
+        if (active) setError(String(reason))
+      })
+    return () => {
+      active = false
+    }
+  }, [doc, page, onText, initialText])
+  useEffect(() => {
+    if (!doc) return
+    let active = true
     let renderTask: pdfjs.RenderTask | undefined
+    let textLayer: pdfjs.TextLayer | undefined
     const render = async () => {
       const safePage = Math.min(Math.max(page, 1), doc.numPages)
       const pdfPage = await doc.getPage(safePage)
@@ -429,9 +547,13 @@ function PdfCanvas({
       if (!context) throw new Error('Canvas rendering is unavailable.')
       renderTask = pdfPage.render({ canvas: target, canvasContext: context, viewport })
       await renderTask.promise
-      if (active) {
-        const text = await pdfPage.getTextContent()
-        onText(text.items.map((item) => ('str' in item ? item.str : '')).join(' '))
+      if (active && textContent && textContainer.current) {
+        textContainer.current.replaceChildren()
+        const viewport = pdfPage.getViewport({ scale: effectiveZoom })
+        textContainer.current.style.setProperty('--scale-factor', String(effectiveZoom))
+        textContainer.current.style.setProperty('--total-scale-factor', String(effectiveZoom))
+        textLayer = new pdfjs.TextLayer({ textContentSource: textContent, container: textContainer.current, viewport })
+        await textLayer.render()
       }
     }
     void render().catch((reason: unknown) => {
@@ -442,9 +564,11 @@ function PdfCanvas({
     return () => {
       active = false
       renderTask?.cancel()
+      textLayer?.cancel()
     }
-  }, [doc, effectiveZoom, onText, page])
+  }, [doc, effectiveZoom, textContent, page])
   const start = (event: PointerEvent<HTMLDivElement>) => {
+    if (interaction !== 'region' || !canCapture) return
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, event.clientX - rect.left)
     const y = Math.max(0, event.clientY - rect.top)
@@ -452,7 +576,7 @@ function PdfCanvas({
     onRegion({ x, y, width: 0, height: 0 })
   }
   const move = (event: PointerEvent<HTMLDivElement>) => {
-    if (!region) return
+    if (interaction !== 'region' || !region) return
     const rect = event.currentTarget.getBoundingClientRect()
     onRegion({
       ...region,
@@ -461,7 +585,13 @@ function PdfCanvas({
     })
   }
   const finish = () => {
-    if (!region || region.width < 8 || region.height < 8 || !canvas.current) return
+    if (interaction === 'text') {
+      const selected = window.getSelection()
+      if (selected?.anchorNode && wrapper.current?.contains(selected.anchorNode) && selected.toString().trim())
+        onText(selected.toString())
+      return
+    }
+    if (!canCapture || !region || region.width < 8 || region.height < 8 || !canvas.current) return
     const scale = canvas.current.width / canvas.current.getBoundingClientRect().width
     const crop = document.createElement('canvas')
     crop.width = Math.round(region.width * scale)
@@ -489,7 +619,7 @@ function PdfCanvas({
   return (
     <div className="pdf-scroll" ref={scroll}>
       <div
-        className="pdf-stage"
+        className={`pdf-stage ${interaction}-selection`}
         ref={wrapper}
         onPointerDown={start}
         onPointerMove={move}
@@ -497,6 +627,11 @@ function PdfCanvas({
         aria-label="PDF page. Drag to capture an image region."
       >
         <canvas ref={canvas} />
+        <div
+          className="textLayer"
+          ref={textContainer}
+          style={{ pointerEvents: interaction === 'text' ? 'auto' : 'none' }}
+        />
         {region && (
           <div
             className="pdf-region"
@@ -507,7 +642,12 @@ function PdfCanvas({
         {error && <div className="pdf-loading">Unable to render PDF: {error}</div>}
       </div>
       <p className="pdf-help">
-        <Maximize2 size={13} /> Drag on the page to capture a region.
+        <Maximize2 size={13} />{' '}
+        {interaction === 'region'
+          ? 'Drag on the page to capture a region.'
+          : textContent && !textContent.items.length
+            ? 'No selectable text. Use Region or type evidence manually. OCR is not available.'
+            : 'Select text on the page, or edit the extracted text below.'}
       </p>
     </div>
   )

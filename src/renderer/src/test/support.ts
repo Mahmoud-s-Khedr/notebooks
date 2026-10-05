@@ -164,6 +164,11 @@ const transcriptionRun = (): TranscriptionRun => ({
 /** A complete preload API mock. Defaults are deliberately harmless async values. */
 export const createResearchNotebookApi = (): ResearchNotebookApiMock => {
   const api = {
+    lifecycle: {
+      onCloseRequest: vi.fn().mockReturnValue(() => undefined),
+      closeResult: vi.fn(),
+      restart: vi.fn().mockResolvedValue(undefined)
+    },
     notebooks: {
       list: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue(notebook()),

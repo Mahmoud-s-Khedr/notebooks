@@ -1,0 +1,1549 @@
+{
+  "complete": true,
+  "version": "0.1.0",
+  "capturedAt": "2026-10-05T16:14:01.875Z",
+  "platform": "linux",
+  "pdf": "think-python-2nd.pdf",
+  "microphone": "Chromium synthetic audio device; no real microphone permission prompt or speech tested",
+  "captures": [
+    {
+      "id": "01-first-run",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Create notebook",
+          "shape": "rect",
+          "x": 803.734375,
+          "y": 485.5,
+          "width": 128.53125,
+          "height": 34
+        },
+        {
+          "n": 2,
+          "description": "New notebook",
+          "shape": "rect",
+          "x": 15,
+          "y": 785,
+          "width": 266,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Application menu",
+          "shape": "circle",
+          "x": 1388,
+          "y": 10.5,
+          "width": 34,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "02-hierarchy",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Rename notebook",
+          "shape": "rect",
+          "x": 43,
+          "y": 156,
+          "width": 207,
+          "height": 18
+        },
+        {
+          "n": 2,
+          "description": "Rename page",
+          "shape": "rect",
+          "x": 440,
+          "y": 111,
+          "width": 700.21875,
+          "height": 51
+        },
+        {
+          "n": 3,
+          "description": "New page",
+          "shape": "rect",
+          "x": 43,
+          "y": 216,
+          "width": 200,
+          "height": 28
+        },
+        {
+          "n": 4,
+          "description": "Add note",
+          "shape": "rect",
+          "x": 1149.21875,
+          "y": 106,
+          "width": 103.78125,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "Page actions",
+          "shape": "circle",
+          "x": 1262,
+          "y": 106,
+          "width": 34,
+          "height": 34
+        },
+        {
+          "n": 6,
+          "description": "Notebook trash",
+          "shape": "circle",
+          "x": 257,
+          "y": 156.5,
+          "width": 17,
+          "height": 17
+        }
+      ]
+    },
+    {
+      "id": "03-block-types",
+      "width": 1440,
+      "height": 1184,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Text",
+          "shape": "rect",
+          "x": 595,
+          "y": 214,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 2,
+          "description": "Source text",
+          "shape": "rect",
+          "x": 595,
+          "y": 332,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 3,
+          "description": "Commentary",
+          "shape": "rect",
+          "x": 595,
+          "y": 450,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 4,
+          "description": "Explanation",
+          "shape": "rect",
+          "x": 595,
+          "y": 568,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 5,
+          "description": "Question",
+          "shape": "rect",
+          "x": 595,
+          "y": 686,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 6,
+          "description": "Answer",
+          "shape": "rect",
+          "x": 595,
+          "y": 804,
+          "width": 656,
+          "height": 76
+        },
+        {
+          "n": 7,
+          "description": "Quote",
+          "shape": "rect",
+          "x": 595,
+          "y": 922,
+          "width": 656,
+          "height": 76
+        }
+      ],
+      "displayCrop": {
+        "x": 430,
+        "y": 200,
+        "width": 870,
+        "height": 900
+      }
+    },
+    {
+      "id": "04-insert-menu",
+      "width": 251,
+      "height": 314,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Insert a block",
+          "shape": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 250.421875,
+          "height": 314
+        }
+      ]
+    },
+    {
+      "id": "05-block-actions",
+      "width": 190,
+      "height": 213,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Duplicate",
+          "shape": "rect",
+          "x": 6,
+          "y": 6,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 2,
+          "description": "Move up",
+          "shape": "rect",
+          "x": 6,
+          "y": 38,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 3,
+          "description": "Move down",
+          "shape": "rect",
+          "x": 6,
+          "y": 70,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 4,
+          "description": "Add answer",
+          "shape": "rect",
+          "x": 6,
+          "y": 102,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 5,
+          "description": "Inspector",
+          "shape": "rect",
+          "x": 6,
+          "y": 134,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 6,
+          "description": "Move to trash",
+          "shape": "rect",
+          "x": 6,
+          "y": 175,
+          "width": 178,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "06-reorder",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Drag handle",
+          "shape": "circle",
+          "x": 460,
+          "y": 168,
+          "width": 21,
+          "height": 21
+        },
+        {
+          "n": 2,
+          "description": "Focused text block for Alt+arrows",
+          "shape": "rect",
+          "x": 595,
+          "y": 169,
+          "width": 641,
+          "height": 76
+        }
+      ]
+    },
+    {
+      "id": "07-inspector",
+      "width": 360,
+      "height": 409,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Convert block",
+          "shape": "rect",
+          "x": 19,
+          "y": 98,
+          "width": 322,
+          "height": 33
+        },
+        {
+          "n": 2,
+          "description": "Relation type",
+          "shape": "rect",
+          "x": 19,
+          "y": 186,
+          "width": 130.9375,
+          "height": 33
+        },
+        {
+          "n": 3,
+          "description": "Block to link",
+          "shape": "rect",
+          "x": 154.9375,
+          "y": 186,
+          "width": 130.953125,
+          "height": 33
+        },
+        {
+          "n": 4,
+          "description": "Link",
+          "shape": "rect",
+          "x": 290.890625,
+          "y": 186,
+          "width": 50.109375,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "Existing relation and remove control",
+          "shape": "rect",
+          "x": 19,
+          "y": 227,
+          "width": 322,
+          "height": 29
+        },
+        {
+          "n": 6,
+          "description": "Read-only metadata",
+          "shape": "rect",
+          "x": 19,
+          "y": 273,
+          "width": 322,
+          "height": 66
+        },
+        {
+          "n": 7,
+          "description": "Close inspector",
+          "shape": "circle",
+          "x": 307,
+          "y": 19,
+          "width": 34,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "08-app-menu",
+      "width": 190,
+      "height": 213,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Import lossless archive",
+          "shape": "rect",
+          "x": 6,
+          "y": 6,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 2,
+          "description": "Library backup",
+          "shape": "rect",
+          "x": 6,
+          "y": 38,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 3,
+          "description": "jobs",
+          "shape": "rect",
+          "x": 6,
+          "y": 79,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 4,
+          "description": "diagnostics",
+          "shape": "rect",
+          "x": 6,
+          "y": 111,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 5,
+          "description": "settings",
+          "shape": "rect",
+          "x": 6,
+          "y": 143,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 6,
+          "description": "trash",
+          "shape": "rect",
+          "x": 6,
+          "y": 175,
+          "width": 178,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "09-trash",
+      "width": 600,
+      "height": 220,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Restore",
+          "shape": "rect",
+          "x": 451.171875,
+          "y": 153.15625,
+          "width": 62.390625,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Permanent Delete",
+          "shape": "rect",
+          "x": 521.5625,
+          "y": 153.15625,
+          "width": 55.4375,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "10-research",
+      "width": 1800,
+      "height": 1034,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Research mode",
+          "shape": "rect",
+          "x": 1579.53125,
+          "y": 13.5,
+          "width": 100.84375,
+          "height": 28
+        },
+        {
+          "n": 2,
+          "description": "Import PDF",
+          "shape": "rect",
+          "x": 827.171875,
+          "y": 77,
+          "width": 78.140625,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Switch source",
+          "shape": "rect",
+          "x": 314,
+          "y": 142.5,
+          "width": 156,
+          "height": 31
+        },
+        {
+          "n": 4,
+          "description": "PDF page",
+          "shape": "rect",
+          "x": 381.5,
+          "y": 915.5,
+          "width": 42,
+          "height": 27
+        },
+        {
+          "n": 5,
+          "description": "Zoom controls",
+          "shape": "circle",
+          "x": 578.125,
+          "y": 912,
+          "width": 32.734375,
+          "height": 34
+        },
+        {
+          "n": 6,
+          "description": "Printed page",
+          "shape": "rect",
+          "x": 660,
+          "y": 915.5,
+          "width": 42,
+          "height": 27
+        },
+        {
+          "n": 7,
+          "description": "Editable extracted page text",
+          "shape": "rect",
+          "x": 314,
+          "y": 955,
+          "width": 591.3125,
+          "height": 58
+        },
+        {
+          "n": 8,
+          "description": "Capture text",
+          "shape": "rect",
+          "x": 705,
+          "y": 914.5,
+          "width": 111.65625,
+          "height": 29
+        },
+        {
+          "n": 9,
+          "description": "Create Q&A",
+          "shape": "rect",
+          "x": 819.65625,
+          "y": 914.5,
+          "width": 85.65625,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "11-capture-controls",
+      "width": 592,
+      "height": 111,
+      "markers": [
+        {
+          "n": 1,
+          "description": "PDF page",
+          "shape": "rect",
+          "x": 67.5,
+          "y": 13.5,
+          "width": 42,
+          "height": 27
+        },
+        {
+          "n": 2,
+          "description": "Previous page",
+          "shape": "circle",
+          "x": 0,
+          "y": 10,
+          "width": 32.734375,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Next page",
+          "shape": "circle",
+          "x": 143.015625,
+          "y": 10,
+          "width": 32.75,
+          "height": 34
+        },
+        {
+          "n": 4,
+          "description": "Zoom out",
+          "shape": "circle",
+          "x": 192.71875,
+          "y": 10,
+          "width": 32.75,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "Zoom in",
+          "shape": "circle",
+          "x": 264.125,
+          "y": 10,
+          "width": 32.734375,
+          "height": 34
+        },
+        {
+          "n": 6,
+          "description": "Print p.",
+          "shape": "rect",
+          "x": 346,
+          "y": 13.5,
+          "width": 42,
+          "height": 27
+        },
+        {
+          "n": 7,
+          "description": "Edit extracted text",
+          "shape": "rect",
+          "x": 0,
+          "y": 53,
+          "width": 591.3125,
+          "height": 58
+        },
+        {
+          "n": 8,
+          "description": "Capture text",
+          "shape": "rect",
+          "x": 391,
+          "y": 12.5,
+          "width": 111.65625,
+          "height": 29
+        },
+        {
+          "n": 9,
+          "description": "Create Q&A",
+          "shape": "rect",
+          "x": 505.65625,
+          "y": 12.5,
+          "width": 85.65625,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "12-evidence",
+      "width": 1800,
+      "height": 1034,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Captured source text",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 331,
+          "width": 523.6875,
+          "height": 76
+        },
+        {
+          "n": 2,
+          "description": "Source navigation",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 417,
+          "width": 195.78125,
+          "height": 21
+        },
+        {
+          "n": 3,
+          "description": "Q&A question",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 532.5,
+          "width": 523.6875,
+          "height": 76
+        },
+        {
+          "n": 4,
+          "description": "Linked blank answer",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 676,
+          "width": 523.6875,
+          "height": 76
+        }
+      ]
+    },
+    {
+      "id": "13-region",
+      "width": 1800,
+      "height": 1034,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Drag down and right on the PDF",
+          "shape": "rect",
+          "x": 445.65625,
+          "y": 204,
+          "width": 328,
+          "height": 430
+        },
+        {
+          "n": 2,
+          "description": "Captured region image",
+          "shape": "rect",
+          "x": 1159.3125,
+          "y": 474.5,
+          "width": 192,
+          "height": 67
+        }
+      ]
+    },
+    {
+      "id": "14-layout",
+      "width": 1800,
+      "height": 1034,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Expand sidebar",
+          "shape": "circle",
+          "x": 18,
+          "y": 10.5,
+          "width": 34,
+          "height": 34
+        },
+        {
+          "n": 2,
+          "description": "Drag divider to resize panes",
+          "shape": "rect",
+          "x": 752.640625,
+          "y": 56,
+          "width": 8,
+          "height": 978
+        },
+        {
+          "n": 3,
+          "description": "Write mode",
+          "shape": "rect",
+          "x": 1680.375,
+          "y": 13.5,
+          "width": 53.625,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "id": "15-attachments",
+      "width": 190,
+      "height": 140,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Attach image",
+          "shape": "rect",
+          "x": 6,
+          "y": 6,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 2,
+          "description": "Attach screenshot",
+          "shape": "rect",
+          "x": 6,
+          "y": 38,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 3,
+          "description": "Attach audio",
+          "shape": "rect",
+          "x": 6,
+          "y": 70,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 4,
+          "description": "Attach file",
+          "shape": "rect",
+          "x": 6,
+          "y": 102,
+          "width": 178,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "16-record-ready",
+      "width": 841,
+      "height": 58,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Record audio",
+          "shape": "rect",
+          "x": 118.40625,
+          "y": 14.65625,
+          "width": 116.265625,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Add block",
+          "shape": "rect",
+          "x": 0,
+          "y": 12.15625,
+          "width": 110.40625,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "17-recording",
+      "width": 841,
+      "height": 58,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Stop recording",
+          "shape": "rect",
+          "x": 118.40625,
+          "y": 14.65625,
+          "width": 125.625,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Recording status and input meter",
+          "shape": "rect",
+          "x": 253.03125,
+          "y": 14.65625,
+          "width": 116.78125,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "18-audio",
+      "width": 841,
+      "height": 128,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Playback controls",
+          "shape": "rect",
+          "x": 182,
+          "y": 19.15625,
+          "width": 300,
+          "height": 54
+        },
+        {
+          "n": 2,
+          "description": "Provider",
+          "shape": "rect",
+          "x": 166,
+          "y": 97.15625,
+          "width": 114,
+          "height": 29
+        },
+        {
+          "n": 3,
+          "description": "Language hint",
+          "shape": "rect",
+          "x": 285,
+          "y": 97.15625,
+          "width": 205,
+          "height": 29
+        },
+        {
+          "n": 4,
+          "description": "Transcribe",
+          "shape": "rect",
+          "x": 495,
+          "y": 97.15625,
+          "width": 80.28125,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "19-transcription-unavailable",
+      "width": 1144,
+      "height": 43,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Missing runtime alert",
+          "shape": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 1144,
+          "height": 43
+        }
+      ]
+    },
+    {
+      "id": "20-appearance",
+      "width": 1144,
+      "height": 735,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Appearance",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 241,
+          "width": 710.40625,
+          "height": 35
+        },
+        {
+          "n": 2,
+          "description": "Layout density",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 313,
+          "width": 710.40625,
+          "height": 35
+        },
+        {
+          "n": 3,
+          "description": "Back to workspace",
+          "shape": "rect",
+          "x": 899.75,
+          "y": 42,
+          "width": 143.453125,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "21-models",
+      "width": 696,
+      "height": 563,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Local API key field",
+          "shape": "rect",
+          "x": 18.796875,
+          "y": 154.5,
+          "width": 659.40625,
+          "height": 36
+        },
+        {
+          "n": 2,
+          "description": "Save key",
+          "shape": "rect",
+          "x": 18.796875,
+          "y": 205.5,
+          "width": 80.265625,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Tiny model and Download",
+          "shape": "rect",
+          "x": 0.796875,
+          "y": 356,
+          "width": 695.40625,
+          "height": 75
+        },
+        {
+          "n": 4,
+          "description": "Base model and Download",
+          "shape": "rect",
+          "x": 0.796875,
+          "y": 439,
+          "width": 695.40625,
+          "height": 75
+        }
+      ]
+    },
+    {
+      "id": "22-model-download",
+      "width": 696,
+      "height": 563,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Actual download state",
+          "shape": "rect",
+          "x": 0.796875,
+          "y": 356,
+          "width": 695.40625,
+          "height": 95
+        }
+      ]
+    },
+    {
+      "id": "23-maintenance",
+      "width": 1144,
+      "height": 735,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Back up library",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 288.5,
+          "width": 118.546875,
+          "height": 34
+        },
+        {
+          "n": 2,
+          "description": "Asset scan",
+          "shape": "rect",
+          "x": 458.34375,
+          "y": 288.5,
+          "width": 203.9375,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Export diagnostics",
+          "shape": "rect",
+          "x": 669.28125,
+          "y": 288.5,
+          "width": 141.390625,
+          "height": 34
+        },
+        {
+          "n": 4,
+          "description": "Scan counts",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 252.5,
+          "width": 710.40625,
+          "height": 20
+        },
+        {
+          "n": 5,
+          "description": "Actual job history",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 346.5,
+          "width": 710.40625,
+          "height": 57
+        }
+      ]
+    },
+    {
+      "id": "24-cloud-unavailable",
+      "width": 841,
+      "height": 229,
+      "markers": [
+        {
+          "n": 1,
+          "description": "OpenRouter selected",
+          "shape": "rect",
+          "x": 166,
+          "y": 97.15625,
+          "width": 114,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Actual status without credentials",
+          "shape": "rect",
+          "x": 155,
+          "y": 89.15625,
+          "width": 641,
+          "height": 65
+        }
+      ]
+    },
+    {
+      "id": "25-jobs",
+      "width": 600,
+      "height": 187,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Actual statuses and Retry controls",
+          "shape": "rect",
+          "x": 23,
+          "y": 107.40625,
+          "width": 554,
+          "height": 57
+        }
+      ]
+    },
+    {
+      "id": "26-diagnostics",
+      "width": 600,
+      "height": 730,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Process filter",
+          "shape": "rect",
+          "x": 23,
+          "y": 212.65625,
+          "width": 125,
+          "height": 24
+        },
+        {
+          "n": 2,
+          "description": "Severity filter",
+          "shape": "rect",
+          "x": 148,
+          "y": 212.65625,
+          "width": 119,
+          "height": 24
+        },
+        {
+          "n": 3,
+          "description": "Category filter",
+          "shape": "rect",
+          "x": 23,
+          "y": 236.65625,
+          "width": 554,
+          "height": 36
+        },
+        {
+          "n": 4,
+          "description": "Export diagnostics",
+          "shape": "rect",
+          "x": 129.921875,
+          "y": 178.65625,
+          "width": 141.390625,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "Show full detail",
+          "shape": "rect",
+          "x": 23,
+          "y": 312.65625,
+          "width": 108.046875,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "27-page-actions",
+      "width": 190,
+      "height": 85,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Export page",
+          "shape": "rect",
+          "x": 6,
+          "y": 6,
+          "width": 178,
+          "height": 32
+        },
+        {
+          "n": 2,
+          "description": "Move page to trash",
+          "shape": "rect",
+          "x": 6,
+          "y": 47,
+          "width": 178,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "28-export",
+      "width": 600,
+      "height": 236,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Scope",
+          "shape": "rect",
+          "x": 23,
+          "y": 128.90625,
+          "width": 554,
+          "height": 35
+        },
+        {
+          "n": 2,
+          "description": "markdown",
+          "shape": "rect",
+          "x": 23,
+          "y": 178.90625,
+          "width": 90.34375,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "pdf",
+          "shape": "rect",
+          "x": 120.34375,
+          "y": 178.90625,
+          "width": 45.28125,
+          "height": 34
+        },
+        {
+          "n": 4,
+          "description": "lossless json",
+          "shape": "rect",
+          "x": 172.625,
+          "y": 178.90625,
+          "width": 105.140625,
+          "height": 34
+        },
+        {
+          "n": 5,
+          "description": "ai context",
+          "shape": "rect",
+          "x": 284.765625,
+          "y": 178.90625,
+          "width": 85.65625,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "29-backup-complete",
+      "width": 600,
+      "height": 559,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Actual backup job status",
+          "shape": "rect",
+          "x": 23,
+          "y": 107.40625,
+          "width": 554,
+          "height": 57
+        }
+      ]
+    },
+    {
+      "id": "30-imported",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Imported notebook copy",
+          "shape": "rect",
+          "x": 15,
+          "y": 291,
+          "width": 266,
+          "height": 126
+        }
+      ]
+    },
+    {
+      "id": "31-page-trash",
+      "width": 600,
+      "height": 220,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Page and descendants",
+          "shape": "rect",
+          "x": 23,
+          "y": 139.65625,
+          "width": 554,
+          "height": 57
+        },
+        {
+          "n": 2,
+          "description": "Restore",
+          "shape": "rect",
+          "x": 451.171875,
+          "y": 153.15625,
+          "width": 62.390625,
+          "height": 29
+        },
+        {
+          "n": 3,
+          "description": "Permanent delete",
+          "shape": "rect",
+          "x": 521.5625,
+          "y": 153.15625,
+          "width": 55.4375,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "32-search",
+      "width": 600,
+      "height": 438,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Search terms",
+          "shape": "rect",
+          "x": 58.125,
+          "y": 107.90625,
+          "width": 508.875,
+          "height": 36
+        },
+        {
+          "n": 2,
+          "description": "Local matches",
+          "shape": "rect",
+          "x": 23,
+          "y": 154.90625,
+          "width": 554,
+          "height": 260
+        }
+      ]
+    },
+    {
+      "id": "33-pagination",
+      "width": 1440,
+      "height": 834,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Load more notes",
+          "shape": "rect",
+          "x": 796.0625,
+          "y": 705,
+          "width": 128.875,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "34-storage",
+      "width": 1144,
+      "height": 778,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Active library and sizes",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 220,
+          "width": 710.40625,
+          "height": 122
+        },
+        {
+          "n": 2,
+          "description": "Move library\u2026",
+          "shape": "rect",
+          "x": 350.796875,
+          "y": 460,
+          "width": 114.40625,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "35-restart-required",
+      "width": 1144,
+      "height": 778,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Restart required",
+          "shape": "rect",
+          "x": 350.796875,
+          "y": 460,
+          "width": 674.40625,
+          "height": 19.5
+        }
+      ]
+    },
+    {
+      "id": "36-remove-original",
+      "width": 1144,
+      "height": 778,
+      "markers": [
+        {
+          "n": 1,
+          "description": "New active library",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 220,
+          "width": 710.40625,
+          "height": 122
+        },
+        {
+          "n": 2,
+          "description": "Retained original",
+          "shape": "rect",
+          "x": 350.796875,
+          "y": 509,
+          "width": 674.40625,
+          "height": 71
+        },
+        {
+          "n": 3,
+          "description": "Remove original",
+          "shape": "rect",
+          "x": 350.796875,
+          "y": 551,
+          "width": 674.40625,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "37-storage-after-removal",
+      "width": 1144,
+      "height": 778,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Active relocated library",
+          "shape": "rect",
+          "x": 332.796875,
+          "y": 220,
+          "width": 710.40625,
+          "height": 122
+        }
+      ]
+    },
+    {
+      "id": "38-source-switch",
+      "width": 477,
+      "height": 500,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Source document selector",
+          "x": 18,
+          "y": 86.5,
+          "width": 172,
+          "height": 31
+        },
+        {
+          "n": 2,
+          "description": "Selected comparison PDF title",
+          "x": 18,
+          "y": 44,
+          "width": 203.984375,
+          "height": 20
+        }
+      ]
+    },
+    {
+      "id": "39-installed-models",
+      "width": 704,
+      "height": 254,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Installed Tiny model",
+          "x": 4.796875,
+          "y": 4,
+          "width": 695.40625,
+          "height": 75
+        },
+        {
+          "n": 2,
+          "description": "Use as default",
+          "x": 509.84375,
+          "y": 27,
+          "width": 100.78125,
+          "height": 29
+        },
+        {
+          "n": 3,
+          "description": "Remove nondefault model",
+          "x": 617.625,
+          "y": 27,
+          "width": 64.578125,
+          "height": 29
+        },
+        {
+          "n": 4,
+          "description": "Current Base default",
+          "x": 622.296875,
+          "y": 110,
+          "width": 59.90625,
+          "height": 29
+        }
+      ],
+      "displayCrop": {
+        "x": 0,
+        "y": 0,
+        "width": 704,
+        "height": 166
+      }
+    },
+    {
+      "id": "41-model-default",
+      "width": 704,
+      "height": 254,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Tiny default",
+          "x": 622.296875,
+          "y": 27,
+          "width": 59.90625,
+          "height": 29
+        },
+        {
+          "n": 2,
+          "description": "Remove Base model",
+          "x": 617.625,
+          "y": 110,
+          "width": 64.578125,
+          "height": 29
+        }
+      ],
+      "displayCrop": {
+        "x": 0,
+        "y": 0,
+        "width": 704,
+        "height": 166
+      }
+    },
+    {
+      "id": "42-model-removed",
+      "width": 704,
+      "height": 83,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Base model removed",
+          "x": 4.796875,
+          "y": 4,
+          "width": 695.40625,
+          "height": 75
+        },
+        {
+          "n": 2,
+          "description": "Download again",
+          "x": 605.828125,
+          "y": 27,
+          "width": 76.375,
+          "height": 29
+        }
+      ]
+    },
+    {
+      "id": "40-key-controls",
+      "width": 704,
+      "height": 218,
+      "markers": [
+        {
+          "n": 1,
+          "description": "Replace API key field",
+          "x": 22.796875,
+          "y": 110.5,
+          "width": 659.40625,
+          "height": 36
+        },
+        {
+          "n": 2,
+          "description": "Replace key",
+          "x": 22.796875,
+          "y": 161.5,
+          "width": 100.203125,
+          "height": 34
+        },
+        {
+          "n": 3,
+          "description": "Remove key",
+          "x": 130,
+          "y": 161.5,
+          "width": 99.953125,
+          "height": 34
+        }
+      ]
+    }
+  ],
+  "observations": [
+    "Local transcription attempted; runtime is absent in this source build. No transcript success claimed.",
+    "OpenRouter attempted without a key; no external audio request or charges authorized.",
+    "Export completed: markdown / notebook",
+    "Export completed: pdf / page",
+    "Export completed: lossless json / notebook",
+    "Export completed: ai context / note",
+    "Imported saved synthetic WAV using Attach audio; Ctrl+Shift+N created a note.",
+    "Lossless import completed; reload required to refresh sidebar.",
+    "Notebook cascade move-to-trash and restoration exercised.",
+    "Load more notes exercised with 51 bridge-seeded demo notes; 50 then 51 displayed.",
+    "Library move, application restart, new library activation and original removal exercised in isolated demo only.",
+    "Imported a second nonprivate PDF copy, switched to it and back using Source document; actual selected second-source state captured.",
+    "Installed and checksum-verified Tiny and Base through actual downloads; changed default Base\u2192Tiny; confirmed and removed the nondefault Base model. Local runtime remains absent.",
+    "Saved, replaced and removed a dummy local key. No provider authentication or external audio request was made."
+  ]
+}

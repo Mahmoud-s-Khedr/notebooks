@@ -4,6 +4,7 @@ vi.mock('electron', () => ({
   nativeImage: { createFromPath: vi.fn() }
 }))
 
+import { nativeImage } from 'electron'
 import { readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { TestLibrary, writeFixture } from '../test-support'
@@ -52,6 +53,26 @@ describe('ThumbnailService managed cache safety', () => {
     )
     await expect(thumbnails.generate(text.id, 120, 80, () => false)).rejects.toThrow('Only image and PDF')
     expect(readdirSync(directory)).toEqual([])
+  })
+
+  it('fits a wide image within the thumbnail bounds without stretching or upscaling', async () => {
+    const library = new TestLibrary()
+    libraries.push(library)
+    const notebook = library.service.createNotebook('Image aspect ratio')
+    const asset = library.service.importAsset(notebook.id, 'image', writeFixture(library.root, 'wide.png', 'fixture'))
+    const resize = vi.fn(() => ({ toPNG: () => Buffer.from('thumbnail') }))
+    vi.mocked(nativeImage.createFromPath).mockReturnValue({
+      isEmpty: () => false,
+      getSize: () => ({ width: 1000, height: 100 }),
+      resize
+    } as any)
+    const thumbnails = new ThumbnailService(library.database.connection, join(library.assets, '.aspect'), (relative) =>
+      join(library.assets, relative.replace(/^assets\//, ''))
+    )
+    await thumbnails.generate(asset.id, 320, 320, () => false)
+    expect(resize).toHaveBeenCalledWith({ width: 320, height: 32, quality: 'good' })
+    await thumbnails.generate(asset.id, 2000, 2000, () => false)
+    expect(resize).toHaveBeenLastCalledWith({ width: 1000, height: 100, quality: 'good' })
   })
 
   it('cleans temporary output when a PDF renderer fails', async () => {

@@ -6,3 +6,7 @@ release/
 third_party/
 .vite/
 docs/test-improvement-plan.md
+
+# Generated guide compositions and standalone HTML are emitted by the guide builder.
+docs/user-guide.html
+docs/images/guide/**/*.svg

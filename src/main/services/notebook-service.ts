@@ -13,6 +13,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { directoryContains, physicalPath } from '../library-path'
 import type {
   Asset,
   AssetDiagnostics,
@@ -259,6 +260,8 @@ export class NotebookService {
   private readonly configDirectory: string
   private readonly libraryRoot: string
   private readonly bootstrapPath: string | null
+  private externalWrites = 0
+  private storageCache: { at: number; assets: number; models: number } | null = null
   private migration: LibraryMigrationStatus = { state: 'idle', destination: null, error: null }
 
   constructor(
@@ -372,14 +375,18 @@ export class NotebookService {
     })
     this.jobs.register('thumbnail', async (payload, progress, cancelled) => {
       progress(10)
-      const result = await this.thumbnails.generate(
-        String(payload.assetId),
-        Number(payload.width),
-        Number(payload.height),
-        cancelled
-      )
-      progress(100)
-      return result
+      try {
+        const result = await this.thumbnails.generate(
+          String(payload.assetId),
+          Number(payload.width),
+          Number(payload.height),
+          cancelled
+        )
+        progress(100)
+        return result
+      } finally {
+        this.storageCache = null
+      }
     })
     this.jobs.register('transcription', async (payload, progress, cancelled) => {
       const run = await this.transcription.execute(String(payload.runId), cancelled, (value) => progress(value))
@@ -391,7 +398,11 @@ export class NotebookService {
       this.backupLibrary(String(payload.destination), progress, cancelled)
     )
     this.jobs.register('model-download', async (payload, progress, cancelled) => {
-      await this.whisperModels.download(String(payload.modelId), cancelled, progress)
+      try {
+        await this.whisperModels.download(String(payload.modelId), cancelled, progress)
+      } finally {
+        this.storageCache = null
+      }
       return { modelId: String(payload.modelId) }
     })
     this.jobs.register('library-move', async (payload, progress, cancelled) =>
@@ -399,6 +410,17 @@ export class NotebookService {
     )
   }
 
+  async finishPendingWrites(): Promise<void> {
+    const active = this.db.prepare("SELECT id FROM jobs WHERE status IN ('queued','running')").all() as { id: string }[]
+    for (const job of active) this.cancelJob(job.id)
+    while (this.externalWrites || this.db.prepare("SELECT id FROM jobs WHERE status='running' LIMIT 1").get())
+      await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  assertWritable(): void {
+    if (['queued', 'copying', 'pending-restart'].includes(this.migration.state))
+      throw new Error('Library move in progress. Restart after the verified copy before editing.')
+    this.storageCache = null
+  }
   listNotebooks(): NotebookTree[] {
     const notebooks = this.db
       .prepare('SELECT * FROM notebooks WHERE deleted_at IS NULL ORDER BY updated_at DESC')
@@ -413,6 +435,7 @@ export class NotebookService {
   }
 
   createNotebook(title: string): Notebook {
+    this.assertWritable()
     return this.db.transaction(() => {
       const createdAt = now()
       const notebook: NotebookRow = {
@@ -434,6 +457,7 @@ export class NotebookService {
   }
 
   updateNotebook(notebookId: string, title: string): Notebook {
+    this.assertWritable()
     return this.db.transaction(() => {
       const updatedAt = now()
       if (
@@ -449,6 +473,7 @@ export class NotebookService {
   }
 
   createPage(notebookId: string, title: string): Page {
+    this.assertWritable()
     return this.db.transaction(() => {
       this.requireActive('notebook', notebookId)
       const createdAt = now()
@@ -474,6 +499,7 @@ export class NotebookService {
   }
 
   updatePage(pageId: string, title: string): Page {
+    this.assertWritable()
     return this.db.transaction(() => {
       const updatedAt = now()
       if (
@@ -514,6 +540,7 @@ export class NotebookService {
   }
 
   createNote(pageId: string, title: string): Note {
+    this.assertWritable()
     return this.db.transaction(() => {
       const page = this.db.prepare('SELECT notebook_id FROM pages WHERE id = ? AND deleted_at IS NULL').get(pageId) as
         { notebook_id: string } | undefined
@@ -541,6 +568,7 @@ export class NotebookService {
   }
 
   updateNote(noteId: string, title: string): Note {
+    this.assertWritable()
     return this.db.transaction(() => {
       const updatedAt = now()
       if (
@@ -557,6 +585,7 @@ export class NotebookService {
   }
 
   duplicateNote(noteId: string): Note {
+    this.assertWritable()
     return this.db.transaction(() => {
       const original = this.activeRow('note', noteId) as NoteRow
       const createdAt = now()
@@ -598,6 +627,7 @@ export class NotebookService {
   }
 
   createBlock(noteId: string, type: BlockType, data: Record<string, unknown> = {}): Block {
+    this.assertWritable()
     return this.db.transaction(() => {
       this.requireActive('note', noteId)
       const createdAt = now()
@@ -625,6 +655,7 @@ export class NotebookService {
   }
 
   updateBlock(blockId: string, data: Record<string, unknown>): Block {
+    this.assertWritable()
     return this.db.transaction(() => {
       const updatedAt = now()
       if (
@@ -641,6 +672,7 @@ export class NotebookService {
   }
 
   updateBlockType(blockId: string, type: TextBlockType): Block {
+    this.assertWritable()
     return this.db.transaction(() => {
       const block = this.activeRow('block', blockId) as BlockRow
       if (!(textBlockTypes as readonly string[]).includes(block.type))
@@ -654,6 +686,7 @@ export class NotebookService {
   }
 
   duplicateBlock(blockId: string): Block {
+    this.assertWritable()
     return this.db.transaction(() => {
       const original = this.activeRow('block', blockId) as BlockRow
       const createdAt = now()
@@ -678,6 +711,7 @@ export class NotebookService {
   }
 
   reorderBlocks(noteId: string, blockIds: string[]): void {
+    this.assertWritable()
     this.db.transaction(() => {
       this.requireActive('note', noteId)
       const existing = this.db
@@ -707,6 +741,7 @@ export class NotebookService {
   }
 
   createRelation(fromBlockId: string, toBlockId: string, relationType: RelationType): BlockRelation {
+    this.assertWritable()
     return this.db.transaction(() => {
       if (fromBlockId === toBlockId) throw new Error('A block cannot be related to itself.')
       const from = this.blockNotebook(fromBlockId)
@@ -731,11 +766,13 @@ export class NotebookService {
   }
 
   removeRelation(relationId: string): void {
+    this.assertWritable()
     if (this.db.prepare('DELETE FROM block_relations WHERE id = ?').run(relationId).changes !== 1)
       throw missing('Relation', relationId)
   }
 
   importAsset(notebookId: string, kind: AssetKind, sourcePath: string): Asset {
+    this.assertWritable()
     this.requireActive('notebook', notebookId)
     const file = statSync(sourcePath)
     if (!file.isFile()) throw new Error('Only files can be imported as assets.')
@@ -791,6 +828,7 @@ export class NotebookService {
     return `data:${asset.mime_type ?? 'application/octet-stream'};base64,${readFileSync(path).toString('base64')}`
   }
   requestThumbnail(assetId: string, width: number, height: number) {
+    this.assertWritable()
     this.assetDataUrl(assetId) // validates ownership/existence without exposing its path
     return this.jobs.start('thumbnail', { assetId, width, height })
   }
@@ -798,6 +836,7 @@ export class NotebookService {
     return this.thumbnails.get(assetId, width, height)
   }
   attachAsset(noteId: string, assetId: string, type: 'image' | 'screenshot' | 'audio' | 'file'): Block {
+    this.assertWritable()
     const noteNotebook = this.db
       .prepare(
         'SELECT pages.notebook_id FROM notes JOIN pages ON pages.id = notes.page_id WHERE notes.id = ? AND notes.deleted_at IS NULL'
@@ -818,8 +857,17 @@ export class NotebookService {
       .run(assetId, block.id, now())
     return block
   }
-  saveRecording(noteId: string, wavBase64: string, filename = 'recording.wav'): Block {
+  saveRecording(noteId: string, wavBase64: string, filename = 'recording.wav', operationId?: string): Block {
+    this.assertWritable()
     this.requireActive('note', noteId)
+    if (operationId) {
+      const prior = this.db
+        .prepare(
+          "SELECT * FROM blocks WHERE note_id=? AND type='audio' AND json_extract(metadata_json,'$.recordingOperationId')=? AND deleted_at IS NULL"
+        )
+        .get(noteId, operationId) as BlockRow | undefined
+      if (prior) return asBlock(prior)
+    }
     if (!/^[A-Za-z0-9+/=]+$/.test(wavBase64) || wavBase64.length > 80_000_000)
       throw new Error('The recording data is invalid or too large.')
     const bytes = Buffer.from(wavBase64, 'base64')
@@ -839,24 +887,30 @@ export class NotebookService {
       .get(noteId) as { notebook_id: string }
     const relativePath = this.writeBytes('audio' as 'screenshots', wavBase64, '.wav')
     try {
-      const asset = this.insertWrittenAsset(
-        notebook.notebook_id,
-        'audio',
-        relativePath,
-        filename.replace(/[^A-Za-z0-9._ -]/g, '_').slice(0, 180),
-        'audio/wav'
-      )
-      const durationMs = Math.round(((bytes.length - 44) / 32000) * 1000)
-      const block = this.createBlock(noteId, 'audio', {
-        assetId: asset.id,
-        filename: asset.originalFilename,
-        mimeType: 'audio/wav',
-        durationMs
-      })
-      this.db
-        .prepare('INSERT INTO asset_references (asset_id, block_id, created_at) VALUES (?, ?, ?)')
-        .run(asset.id, block.id, now())
-      return block
+      return this.db.transaction(() => {
+        const asset = this.insertWrittenAsset(
+          notebook.notebook_id,
+          'audio',
+          relativePath,
+          filename.replace(/[^A-Za-z0-9._ -]/g, '_').slice(0, 180),
+          'audio/wav'
+        )
+        const durationMs = Math.round(((bytes.length - 44) / 32000) * 1000)
+        const block = this.createBlock(noteId, 'audio', {
+          assetId: asset.id,
+          filename: asset.originalFilename,
+          mimeType: 'audio/wav',
+          durationMs
+        })
+        this.db
+          .prepare('INSERT INTO asset_references (asset_id, block_id, created_at) VALUES (?, ?, ?)')
+          .run(asset.id, block.id, now())
+        if (operationId)
+          this.db
+            .prepare('UPDATE blocks SET metadata_json=? WHERE id=?')
+            .run(JSON.stringify({ recordingOperationId: operationId }), block.id)
+        return { ...block, metadata: operationId ? { recordingOperationId: operationId } : block.metadata }
+      })()
     } catch (error) {
       rmSync(this.absoluteAssetPath(relativePath), { force: true })
       throw error
@@ -868,6 +922,7 @@ export class NotebookService {
     model?: string,
     language?: string
   ): Promise<Job | TranscriptionRun> {
+    this.assertWritable()
     const chosen =
       model ?? (provider === 'local' ? this.transcriptionConfig.selectedModel() : 'openai/whisper-large-v3')
     if (provider === 'local') {
@@ -879,7 +934,12 @@ export class NotebookService {
     }
     const run = this.transcription.create(blockId, provider, chosen, language)
     if (provider === 'local') return this.jobs.start('transcription', { runId: run.id })
-    return this.transcription.execute(run.id)
+    this.externalWrites++
+    try {
+      return await this.transcription.execute(run.id)
+    } finally {
+      this.externalWrites--
+    }
   }
   getTranscription(runId: string): TranscriptionRun {
     return this.transcription.get(runId)
@@ -889,26 +949,34 @@ export class NotebookService {
     return this.transcription.list(blockId)
   }
   async retryTranscription(runId: string): Promise<Job | TranscriptionRun> {
+    this.assertWritable()
     const prior = this.transcription.get(runId)
     const run = this.transcription.create(prior.blockId, prior.provider, prior.model, prior.language ?? undefined)
-    return prior.provider === 'local'
-      ? this.jobs.start('transcription', { runId: run.id, retryOf: runId })
-      : this.transcription.execute(run.id)
+    if (prior.provider === 'local') return this.jobs.start('transcription', { runId: run.id, retryOf: runId })
+    this.externalWrites++
+    try {
+      return await this.transcription.execute(run.id)
+    } finally {
+      this.externalWrites--
+    }
   }
   transcriptionSettings(): TranscriptionSettings {
     return this.transcription.getSettings()
   }
   setOpenRouterKey(key: string): void {
+    this.assertWritable()
     if (key.length > 1000) throw new Error('The OpenRouter key is too long.')
     this.transcriptionConfig.setKey(key)
   }
   removeOpenRouterKey(): void {
+    this.assertWritable()
     this.transcriptionConfig.removeKey()
   }
   preferences(): AppPreferences {
     return this.transcriptionConfig.preferences()
   }
   updatePreferences(input: Partial<AppPreferences>): AppPreferences {
+    this.assertWritable()
     this.transcriptionConfig.setPreferences(input)
     return this.preferences()
   }
@@ -916,6 +984,7 @@ export class NotebookService {
     return this.whisperModels.list()
   }
   downloadWhisperModel(modelId: string): Job {
+    this.assertWritable()
     if (this.whisperModels.getStatus(modelId).available) throw new Error('This Whisper model is already installed.')
     return this.jobs.start('model-download', { modelId })
   }
@@ -932,19 +1001,23 @@ export class NotebookService {
     else if (!this.whisperModels.getStatus(modelId).available) throw new Error('No download is running for this model.')
   }
   removeWhisperModel(modelId: string): void {
+    this.assertWritable()
     if (modelId === this.transcriptionConfig.selectedModel())
       throw new Error('Choose another installed default model before removing this one.')
     this.whisperModels.remove(modelId)
   }
   setDefaultWhisperModel(modelId: string): void {
+    this.assertWritable()
     if (!this.whisperModels.getStatus(modelId).available)
       throw new Error('Download this Whisper model before choosing it as default.')
     this.transcriptionConfig.setSelectedModel(modelId)
   }
   export(scope: ExportScope, format: ExportFormat, destination: string): ExportResult {
+    this.assertWritable()
     return this.exports.start(scope, format, destination)
   }
   startExport(scope: ExportScope, format: ExportFormat, destination: string) {
+    this.assertWritable()
     return this.jobs.start(format === 'pdf' ? 'pdf' : 'export', { scope, format, destination })
   }
   listJobs() {
@@ -954,23 +1027,42 @@ export class NotebookService {
     this.jobs.resume()
   }
   cancelJob(jobId: string) {
-    return this.jobs.cancel(jobId)
+    const job = this.jobs.cancel(jobId)
+    if (job.kind === 'library-move' && job.status === 'cancelled')
+      this.migration = { state: 'idle', destination: null, error: null }
+    return job
   }
   retryJob(jobId: string) {
+    this.assertWritable()
+    const prior = this.jobs.get(jobId)
+    if (prior.kind === 'library-move') {
+      if (!['failed', 'cancelled'].includes(prior.status))
+        throw new Error('Only failed or cancelled jobs can be retried.')
+      const row = this.db.prepare('SELECT payload_json FROM jobs WHERE id=?').get(jobId) as { payload_json: string }
+      return this.startLibraryMove(String(JSON.parse(row.payload_json).destination))
+    }
     return this.jobs.retry(jobId)
   }
   startIntegrityScan(notebookId: string) {
+    this.assertWritable()
     return this.jobs.start('asset-integrity', { notebookId })
   }
   startBackup(destination: string) {
+    this.assertWritable()
     return this.jobs.start('backup', { destination })
   }
-  storageSummary(): StorageSummary {
+  storageSummary(refresh = false): StorageSummary {
+    if (refresh || !this.storageCache || Date.now() - this.storageCache.at > 5000)
+      this.storageCache = {
+        at: Date.now(),
+        assets: this.directoryBytes(this.assetsDirectory),
+        models: this.directoryBytes(join(this.configDirectory, 'whisper-models'))
+      }
     return {
       libraryPath: this.libraryRoot,
       databaseBytes: existsSync(this.databasePath) ? statSync(this.databasePath).size : 0,
-      assetsBytes: this.directoryBytes(this.assetsDirectory),
-      modelsBytes: this.directoryBytes(join(this.configDirectory, 'whisper-models')),
+      assetsBytes: this.storageCache.assets,
+      modelsBytes: this.storageCache.models,
       oldLibraryPath: this.migration.state === 'active' ? this.migration.destination : null,
       migration: this.migration
     }
@@ -980,13 +1072,33 @@ export class NotebookService {
   }
   startLibraryMove(destination: string): Job {
     if (this.databasePath === ':memory:') throw new Error('A disk-backed library is required for migration.')
-    if (this.migration.state === 'copying') throw new Error('A library move is already in progress.')
-    return this.jobs.start('library-move', { destination })
+    this.assertWritable()
+    if (
+      this.externalWrites ||
+      this.db.prepare("SELECT id FROM jobs WHERE status IN ('queued','running') LIMIT 1").get()
+    )
+      throw new Error('Finish or cancel all background jobs before moving the library.')
+    if (directoryContains(physicalPath(this.libraryRoot), physicalPath(destination)))
+      throw new Error('Choose a location outside the current library.')
+    this.migration = { state: 'queued', destination, error: null }
+    try {
+      return this.jobs.start('library-move', { destination })
+    } catch (error) {
+      this.migration = { state: 'failed', destination, error: String(error) }
+      throw error
+    }
   }
   removeOldLibrary(): void {
     if (this.migration.state !== 'active' || !this.migration.destination)
       throw new Error('There is no retained original library to remove.')
     const old = resolve(this.migration.destination)
+    if (!this.bootstrapPath) throw new Error('Destination activation cannot be verified.')
+    const pointer = JSON.parse(readFileSync(this.bootstrapPath, 'utf8')) as {
+      activeRoot?: string
+      previousRoot?: string
+    }
+    if (pointer.activeRoot !== this.libraryRoot || pointer.previousRoot !== old)
+      throw new Error('Restart must activate the destination before removing the original.')
     if (old === this.libraryRoot) throw new Error('The active library cannot be removed.')
     if (this.bootstrapPath && dirname(this.bootstrapPath) === old) {
       for (const name of ['database.sqlite', 'database.sqlite-wal', 'database.sqlite-shm', 'assets', 'config'])
@@ -1016,6 +1128,7 @@ export class NotebookService {
   }
   /** Import is deliberately copy-on-import: archive IDs never enter the live database. */
   importLossless(archivePath: string): ImportResult {
+    this.assertWritable()
     let archive: Record<string, any>
     try {
       archive = JSON.parse(readFileSync(archivePath, 'utf8')) as Record<string, any>
@@ -1325,6 +1438,7 @@ export class NotebookService {
     }
   }
   removeAsset(assetId: string): void {
+    this.assertWritable()
     const asset = this.db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId) as AssetRow | undefined
     if (!asset) throw missing('Asset', assetId)
     const blockReferences = this.db
@@ -1430,8 +1544,13 @@ export class NotebookService {
     const parent = resolve(destination)
     const target = join(parent, `research-notebook-library-${Date.now()}`)
     const staging = `${target}.staging-${randomUUID()}`
-    if (target.startsWith(`${this.libraryRoot}/`) || this.libraryRoot.startsWith(`${target}/`))
+    if (
+      directoryContains(physicalPath(this.libraryRoot), physicalPath(target)) ||
+      directoryContains(physicalPath(target), physicalPath(this.libraryRoot))
+    ) {
+      this.migration = { state: 'failed', destination: target, error: 'Choose a location outside the current library.' }
       throw new Error('Choose a location outside the current library.')
+    }
     this.migration = { state: 'copying', destination: target, error: null }
     let published = false
     let pointerTemporary: string | null = null
@@ -1441,9 +1560,11 @@ export class NotebookService {
       if (cancelled()) throw new Error('Cancelled')
       this.db.exec(`VACUUM INTO '${join(staging, 'database.sqlite').replace(/'/g, "''")}'`)
       progress(25)
+      await new Promise<void>((resolve) => setImmediate(resolve))
       if (cancelled()) throw new Error('Cancelled')
       if (existsSync(this.assetsDirectory)) cpSync(this.assetsDirectory, join(staging, 'assets'), { recursive: true })
       progress(60)
+      await new Promise<void>((resolve) => setImmediate(resolve))
       if (cancelled()) throw new Error('Cancelled')
       if (existsSync(this.configDirectory)) cpSync(this.configDirectory, join(staging, 'config'), { recursive: true })
       const copiedAssets = join(staging, 'assets')
@@ -1468,6 +1589,11 @@ export class NotebookService {
         const integrity = snapshot.connection.prepare('PRAGMA integrity_check').get() as { integrity_check?: string }
         if (integrity.integrity_check !== 'ok')
           throw new Error('Library move verification failed for the database snapshot.')
+        snapshot.connection
+          .prepare(
+            "UPDATE jobs SET status='completed',progress=100,result_json=?,completed_at=?,updated_at=? WHERE kind='library-move' AND status='running'"
+          )
+          .run(JSON.stringify({ destination: target, restartRequired: true }), now(), now())
       } finally {
         snapshot.close()
       }
@@ -1523,6 +1649,7 @@ export class NotebookService {
   }
 
   importPdf(notebookId: string, sourcePath: string): SourceDocument {
+    this.assertWritable()
     const asset = this.importAsset(notebookId, 'file', sourcePath)
     if (asset.mimeType !== 'application/pdf') {
       this.removeAsset(asset.id)
@@ -1571,6 +1698,7 @@ export class NotebookService {
     printedPage: number | undefined,
     text: string
   ): Block {
+    this.assertWritable()
     if (!text.trim()) throw new Error('Select or enter text to capture.')
     const source = this.requireSourceForNote(noteId, sourceDocumentId)
     const block = this.createBlock(noteId, 'source_text', {
@@ -1589,6 +1717,7 @@ export class NotebookService {
     bounds: { x: number; y: number; width: number; height: number },
     imageDataUrl: string
   ): Block {
+    this.assertWritable()
     this.requireSourceForNote(noteId, sourceDocumentId)
     if (
       ![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite) ||
@@ -1624,6 +1753,7 @@ export class NotebookService {
     printedPage: number | undefined,
     text: string
   ): Note {
+    this.assertWritable()
     const note = this.createNote(pageId, 'Q&A from source selection')
     const source = this.requireSourceForNote(note.id, sourceDocumentId)
     const question = this.createBlock(note.id, 'question', {
@@ -1639,6 +1769,7 @@ export class NotebookService {
   }
 
   moveToTrash(entityType: TrashEntityType, id: string): TrashRecord {
+    this.assertWritable()
     return this.db.transaction(() => {
       const root = this.activeRow(entityType, id) as NotebookRow | PageRow | NoteRow | BlockRow
       const deletedAt = now()
@@ -1680,6 +1811,7 @@ export class NotebookService {
   }
 
   restoreFromTrash(entityType: TrashEntityType, id: string, operationId: string): void {
+    this.assertWritable()
     this.db.transaction(() => {
       const root = this.deletedRow(entityType, id, operationId)
       this.ensureRestoreParentActive(entityType, root)
@@ -1689,6 +1821,7 @@ export class NotebookService {
   }
 
   permanentlyDelete(entityType: TrashEntityType, id: string): void {
+    this.assertWritable()
     this.db.transaction(() => {
       if (!this.db.prepare(`SELECT id FROM ${this.table(entityType)} WHERE id = ? AND deleted_at IS NOT NULL`).get(id))
         throw missing(entityType[0].toUpperCase() + entityType.slice(1), id)
@@ -1698,6 +1831,7 @@ export class NotebookService {
   }
 
   emptyTrash(): void {
+    this.assertWritable()
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM notebooks WHERE deleted_at IS NOT NULL').run()
       this.db.prepare('DELETE FROM pages WHERE deleted_at IS NOT NULL').run()

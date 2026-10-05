@@ -47,7 +47,7 @@ describe('PageWorkspace core writing workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Create first note' }))
     await waitFor(() => expect(api.notes.create).toHaveBeenCalledWith({ pageId: 'page-1', title: 'Untitled note' }))
-    expect(view.setActiveNoteId).toHaveBeenCalledWith('note-1')
+    expect(view.reloadWorkspace).toHaveBeenCalledWith('note-1')
 
     await user.click(screen.getByRole('button', { name: 'Add note' }))
     expect(api.notes.create).toHaveBeenCalledTimes(2)
@@ -62,7 +62,6 @@ describe('PageWorkspace core writing workflow', () => {
     fireEvent.blur(title)
 
     await waitFor(() => expect(api.pages.update).toHaveBeenCalledWith({ pageId: 'page-1', title: 'Field notes' }))
-    expect(view.reloadWorkspace).toHaveBeenCalled()
     expect(view.onChanged).toHaveBeenCalled()
   })
 
@@ -165,5 +164,35 @@ describe('PageWorkspace core writing workflow', () => {
     await user.click(within(inspector).getByRole('button', { name: 'Move to trash' }))
     await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Cannot trash' })))
     expect(view.onTrashed).not.toHaveBeenCalled()
+  })
+})
+
+describe('note and block commands', () => {
+  it('opens commands only for empty text and supports arrow selection and Escape', async () => {
+    installResearchNotebookApi()
+    const user = userEvent.setup()
+    renderWorkspace({ notes: [{ ...note(), blocks: [block({ data: { text: '' } })] }] })
+    const text = screen.getByLabelText('text block')
+    await user.click(text)
+    await user.keyboard('/')
+    expect(await screen.findByText('Insert a block')).toBeVisible()
+    await user.keyboard('{ArrowDown}{Escape}')
+    expect(screen.queryByText('Insert a block')).not.toBeInTheDocument()
+    await user.click(text)
+    await user.type(text, 'ordinary/slash')
+    expect(text).toHaveValue('ordinary/slash')
+    expect(screen.queryByText('Insert a block')).not.toBeInTheDocument()
+  })
+  it('renames and trashes a note with the existing services', async () => {
+    const api = installResearchNotebookApi()
+    const user = userEvent.setup()
+    const view = renderWorkspace({ notes: [{ ...note(), blocks: [] }] })
+    await user.clear(screen.getByLabelText('Note title'))
+    await user.type(screen.getByLabelText('Note title'), 'Renamed note')
+    fireEvent.blur(screen.getByLabelText('Note title'))
+    await waitFor(() => expect(api.notes.update).toHaveBeenCalledWith({ noteId: 'note-1', title: 'Renamed note' }))
+    await user.click(screen.getByRole('button', { name: 'Move note to trash' }))
+    await waitFor(() => expect(api.trash.move).toHaveBeenCalledWith({ entityType: 'note', id: 'note-1' }))
+    expect(view.onTrashed).toHaveBeenCalled()
   })
 })

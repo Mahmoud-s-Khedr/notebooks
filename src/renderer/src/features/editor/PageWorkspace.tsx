@@ -15,6 +15,8 @@ import {
   type PageWorkspace as Workspace,
   type TextBlockType
 } from '../../../../shared/domain'
+import { useSaves } from '../../save-coordinator'
+import type { BlockSource } from '../../../../shared/domain'
 import { Button, DropdownMenu, Popover } from '../../components/ui'
 
 const label = (type: string): string => type.replaceAll('_', ' ')
@@ -50,14 +52,15 @@ type Props = {
   workspace: Workspace
   notebookId: string | null
   mode: 'write' | 'research'
-  reloadWorkspace: () => Promise<void>
+  reloadWorkspace: (activateId?: string) => Promise<void>
   loadMore: () => Promise<void>
   activeNoteId: string | null
   setActiveNoteId: (id: string | null) => void
   onError: (error: unknown) => void
   onChanged: () => Promise<void>
+  onNoteRenamed?: (id: string, title: string) => void
   onTrashed: () => Promise<void>
-  onViewSource: () => void
+  onViewSource: (source: BlockSource) => void
   onUtilities: (kind: 'export' | 'trash') => void
 }
 
@@ -71,32 +74,38 @@ export function PageWorkspace({
   setActiveNoteId,
   onError,
   onChanged,
+  onNoteRenamed,
   onTrashed,
   onViewSource,
   onUtilities
 }: Props): ReactElement {
+  const saves = useSaves()
   const [title, setTitle] = useState(workspace.title)
   useEffect(() => setTitle(workspace.title), [workspace.id, workspace.title])
   const createNote = async () => {
     try {
+      await saves.flush()
       const note = await window.researchNotebook.notes.create({ pageId: workspace.id, title: 'Untitled note' })
-      setActiveNoteId(note.id)
-      await reloadWorkspace()
+      await reloadWorkspace(note.id)
     } catch (error) {
       onError(error)
     }
   }
-  const saveTitle = async () => {
-    if (title.trim() && title !== workspace.title)
-      try {
-        await window.researchNotebook.pages.update({ pageId: workspace.id, title })
-        await Promise.all([reloadWorkspace(), onChanged()])
-      } catch (error) {
-        onError(error)
-      }
-  }
+  const saveTitle = useCallback(async () => {
+    if (title.trim() && title !== workspace.title) {
+      await window.researchNotebook.pages.update({ pageId: workspace.id, title })
+      await onChanged()
+    }
+  }, [title, workspace.title, workspace.id, onChanged])
+  useEffect(() => {
+    saves.editors.set(workspace.id, saveTitle)
+    return () => {
+      saves.editors.delete(workspace.id)
+    }
+  }, [saves, workspace.id, saveTitle])
   const movePageToTrash = async () => {
     try {
+      await saves.flush()
       await window.researchNotebook.trash.move({ entityType: 'page', id: workspace.id })
       await onTrashed()
     } catch (error) {
@@ -116,7 +125,7 @@ export function PageWorkspace({
             aria-label="Page title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            onBlur={() => void saveTitle()}
+            onBlur={() => void saveTitle().catch(onError)}
           />
         </div>
         <Button variant="secondary" onClick={() => void createNote()}>
@@ -146,6 +155,7 @@ export function PageWorkspace({
           <NoteEditor
             key={note.id}
             note={note}
+            onRenamed={onNoteRenamed}
             notebookId={notebookId}
             allBlocks={blocks}
             active={activeNoteId === note.id}
@@ -173,6 +183,7 @@ export function PageWorkspace({
 }
 
 function NoteEditor({
+  onRenamed,
   note,
   notebookId,
   allBlocks,
@@ -184,15 +195,31 @@ function NoteEditor({
   onViewSource
 }: {
   note: Workspace['notes'][number]
+  onRenamed?: (id: string, title: string) => void
   notebookId: string | null
   allBlocks: Block[]
   active: boolean
   setActive: () => void
-  reloadWorkspace: () => Promise<void>
+  reloadWorkspace: (activateId?: string) => Promise<void>
   onError: (error: unknown) => void
   onTrashed: () => Promise<void>
-  onViewSource: () => void
+  onViewSource: (source: BlockSource) => void
 }): ReactElement {
+  const saves = useSaves()
+  const [noteTitle, setNoteTitle] = useState(note.title)
+  useEffect(() => setNoteTitle(note.title), [note.title])
+  const saveNoteTitle = useCallback(async () => {
+    if (noteTitle.trim() && noteTitle !== note.title) {
+      await window.researchNotebook.notes.update({ noteId: note.id, title: noteTitle })
+      onRenamed?.(note.id, noteTitle)
+    }
+  }, [note.id, note.title, noteTitle, onRenamed])
+  useEffect(() => {
+    saves.editors.set(note.id, saveNoteTitle)
+    return () => {
+      saves.editors.delete(note.id)
+    }
+  }, [saves, note.id, saveNoteTitle])
   const [slashOpen, setSlashOpen] = useState(false)
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
@@ -260,10 +287,32 @@ function NoteEditor({
       data-item-id={note.id}
       onFocusCapture={setActive}
     >
+      <div className="note-heading">
+        <input
+          aria-label="Note title"
+          value={noteTitle}
+          onChange={(event) => setNoteTitle(event.target.value)}
+          onBlur={() => void saveNoteTitle().catch(onError)}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            void saves
+              .flush()
+              .then(() => window.researchNotebook.trash.move({ entityType: 'note', id: note.id }))
+              .then(onTrashed)
+              .catch(onError)
+          }
+        >
+          Move note to trash
+        </Button>
+      </div>
       {note.blocks.map((block, index) => (
         <BlockEditor
           key={block.id}
           block={block}
+          onSlash={() => setSlashOpen(true)}
           availableBlocks={allBlocks}
           canMoveUp={index > 0}
           canMoveDown={index < note.blocks.length - 1}
@@ -287,7 +336,18 @@ function NoteEditor({
         <Button variant="ghost" onClick={() => void createBlock()}>
           <Plus size={16} /> Add block
         </Button>
-        <AudioRecorder noteId={note.id} onSaved={reloadWorkspace} onError={onError} />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            void saves
+              .flush()
+              .then(() => saves.recorder?.start(note.id))
+              .catch(onError)
+          }
+        >
+          Record audio
+        </Button>
         <Popover.Root open={slashOpen} onOpenChange={setSlashOpen}>
           <Popover.Trigger asChild>
             <Button variant="ghost" className="slash-hint" aria-label="Open block command menu">
@@ -295,7 +355,19 @@ function NoteEditor({
             </Button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content className="slash-menu" side="top" align="start">
+            <Popover.Content
+              className="slash-menu"
+              side="top"
+              align="start"
+              onKeyDown={(event) => {
+                const buttons = Array.from(event.currentTarget.querySelectorAll('button'))
+                const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
+                }
+              }}
+            >
               <strong>Insert a block</strong>
               {textBlockTypes
                 .filter((type) => type !== 'text')
@@ -346,17 +418,13 @@ function NoteEditor({
     }
   }
   async function record(): Promise<void> {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((track) => track.stop())
-      onError(new Error('Use the audio button in a block to start a recording.'))
-    } catch (error) {
-      onError(error)
-    }
+    await saves.flush()
+    await saves.recorder?.start(note.id).catch(onError)
   }
 }
 
 function BlockEditor({
+  onSlash,
   block,
   availableBlocks,
   canMoveUp,
@@ -373,6 +441,7 @@ function BlockEditor({
   onTrashed,
   onViewSource
 }: {
+  onSlash: () => void
   block: Block
   availableBlocks: Block[]
   canMoveUp: boolean
@@ -387,22 +456,25 @@ function BlockEditor({
   onSaved: () => Promise<void>
   onError: (error: unknown) => void
   onTrashed: () => Promise<void>
-  onViewSource: () => void
+  onViewSource: (source: BlockSource) => void
 }): ReactElement {
+  const saves = useSaves()
   const [text, setText] = useState(typeof block.data.text === 'string' ? block.data.text : '')
   const [inspector, setInspector] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const textBased = textBlockTypes.includes(block.type as TextBlockType)
   useEffect(() => setText(typeof block.data.text === 'string' ? block.data.text : ''), [block.id, block.data.text])
-  const save = async () => {
-    if (text !== block.data.text)
-      try {
-        await window.researchNotebook.blocks.update({ blockId: block.id, data: { ...block.data, text } })
-        await onSaved()
-      } catch (error) {
-        onError(error)
-      }
-  }
+  const save = useCallback(async () => {
+    if (text !== block.data.text) {
+      await window.researchNotebook.blocks.update({ blockId: block.id, data: { ...block.data, text } })
+    }
+  }, [text, block.id, block.data])
+  useEffect(() => {
+    saves.editors.set(block.id, save)
+    return () => {
+      saves.editors.delete(block.id)
+    }
+  }, [saves, block.id, save])
   const duplicate = async () => {
     try {
       await window.researchNotebook.blocks.duplicate({ blockId: block.id })
@@ -440,8 +512,7 @@ function BlockEditor({
     try {
       const source = await window.researchNotebook.sources.getBlockSource({ blockId: block.id })
       if (source) {
-        window.dispatchEvent(new CustomEvent('research-notebook:open-source', { detail: source }))
-        onViewSource()
+        onViewSource(source)
       }
     } catch (error) {
       onError(error)
@@ -515,9 +586,12 @@ function BlockEditor({
             aria-label={`${label(block.type)} block`}
             value={text}
             onChange={(event) => setText(event.target.value)}
-            onBlur={() => void save()}
+            onBlur={() => void save().catch(onError)}
             onKeyDown={(event) => {
-              if (event.key === '/' && !text) setInspector(false)
+              if (event.key === '/' && !text) {
+                event.preventDefault()
+                onSlash()
+              }
               if (event.altKey && event.key === 'ArrowUp') {
                 event.preventDefault()
                 onMove(-1)
@@ -698,175 +772,299 @@ function BlockInspector({
 
 function AssetBlock({ block, onError }: { block: Block; onError: (error: unknown) => void }): ReactElement {
   const [url, setUrl] = useState('')
+  const [near, setNear] = useState(false)
+  const target = useRef<HTMLDivElement>(null)
   const assetId = typeof block.data.assetId === 'string' ? block.data.assetId : null
+  const image = block.type === 'image' || block.type === 'screenshot'
   useEffect(() => {
-    if (!assetId) return
-    void window.researchNotebook.assets.dataUrl({ assetId }).then(setUrl).catch(onError)
-  }, [assetId, onError])
-  if (!assetId) return <p className="asset-missing">Missing asset reference.</p>
-  if (block.type === 'image' || block.type === 'screenshot')
-    return url ? (
-      <img
-        className="asset-image"
-        src={url}
-        alt={typeof block.data.filename === 'string' ? block.data.filename : 'Attached asset'}
-      />
-    ) : (
-      <p>Loading image…</p>
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '300px' }
     )
-  if (block.type === 'audio')
-    return (
-      <div className="audio-block">
-        <Volume2 size={18} />
-        {url ? (
-          <audio controls src={url}>
-            Audio playback is unavailable.
-          </audio>
-        ) : (
-          <p>Loading recording…</p>
-        )}
-        <TranscriptionPanel block={block} onError={onError} />
-      </div>
-    )
-  return url ? (
-    <a
-      className="asset-file"
-      href={url}
-      download={typeof block.data.filename === 'string' ? block.data.filename : undefined}
-    >
-      Download attached file
-    </a>
-  ) : (
-    <p>Loading file…</p>
+    if (target.current) observer.observe(target.current)
+    return () => observer.disconnect()
+  }, [])
+  useEffect(() => {
+    if (!near || !assetId) return
+    let alive = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const load = async () => {
+      if (!image) {
+        const value = await window.researchNotebook.assets.dataUrl({ assetId })
+        if (alive) setUrl(value)
+        return
+      }
+      const input = { assetId, width: 800, height: 600 }
+      let value = await window.researchNotebook.assets.thumbnailDataUrl(input)
+      if (!value) {
+        await window.researchNotebook.assets.requestThumbnail(input)
+        let attempts = 0
+        const poll = async () => {
+          value = await window.researchNotebook.assets.thumbnailDataUrl(input)
+          if (!alive) return
+          if (value) setUrl(value)
+          else if (++attempts < 20) timer = setTimeout(() => void poll().catch(onError), 1000)
+        }
+        if (alive) timer = setTimeout(() => void poll().catch(onError), 1000)
+      } else if (alive) setUrl(value)
+    }
+    void load().catch((value) => {
+      if (alive) onError(value)
+    })
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [near, assetId, image, onError])
+  return (
+    <div ref={target} className="asset-container">
+      {!assetId ? (
+        <p className="asset-missing">Missing asset reference.</p>
+      ) : image ? (
+        <>
+          {url ? (
+            <img
+              loading="lazy"
+              className="asset-image"
+              src={url}
+              alt={typeof block.data.filename === 'string' ? block.data.filename : 'Attached asset'}
+            />
+          ) : (
+            <p>Loading image preview…</p>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void window.researchNotebook.assets.dataUrl({ assetId }).then(setUrl).catch(onError)}
+          >
+            Load original image
+          </Button>
+        </>
+      ) : block.type === 'audio' ? (
+        <div className="audio-block">
+          <Volume2 size={18} />
+          {url ? <audio controls preload="none" src={url} /> : <p>Loading recording…</p>}
+          <TranscriptionPanel block={block} onError={onError} />
+        </div>
+      ) : url ? (
+        <a
+          className="asset-file"
+          href={url}
+          download={typeof block.data.filename === 'string' ? block.data.filename : undefined}
+        >
+          Download attached file
+        </a>
+      ) : (
+        <p>Loading file…</p>
+      )}
+    </div>
   )
 }
 
-function AudioRecorder({
+export function AudioRecorder({
   noteId,
   onSaved,
   onError
 }: {
-  noteId: string
+  noteId: string | null
   onSaved: () => Promise<void>
   onError: (error: unknown) => void
 }): ReactElement {
+  const saves = useSaves()
+  const destination = useRef<string | null>(null)
+  const pendingAudio = useRef<string | null>(null)
+  const recordingOperation = useRef<string | null>(null)
+  const needsRefresh = useRef(false)
+  const saving = useRef<Promise<void> | null>(null)
+  const starting = useRef<Promise<void> | null>(null)
+  const [failed, setFailed] = useState(false)
   const [recording, setRecording] = useState(false)
   const [inputLevel, setInputLevel] = useState(0)
   const [microphone, setMicrophone] = useState<'active' | 'muted' | 'disconnected'>('active')
   const chunks = useRef<Float32Array[]>([])
-  const session = useRef<{
+  type RecordingSession = {
     stream: MediaStream
     context: AudioContext
     source: MediaStreamAudioSourceNode
     analyser: AnalyserNode
     processor: ScriptProcessorNode
     meterFrame: number | null
-  } | null>(null)
-  const stopMeter = (current: NonNullable<typeof session.current>) => {
+  }
+  const session = useRef<RecordingSession | null>(null)
+  const stopMeter = useCallback((current: RecordingSession) => {
     if (current.meterFrame !== null) cancelAnimationFrame(current.meterFrame)
     current.meterFrame = null
-  }
-  const start = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } })
-      const context = new AudioContext({ sampleRate: 16000 })
-      const processor = context.createScriptProcessor(4096, 1, 1)
-      const source = context.createMediaStreamSource(stream)
-      const analyser = context.createAnalyser()
-      analyser.fftSize = 512
-      chunks.current = []
-      processor.onaudioprocess = (event) => chunks.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
-      source.connect(analyser)
-      source.connect(processor)
-      processor.connect(context.destination)
-      const current: NonNullable<typeof session.current> = {
-        stream,
-        context,
-        source,
-        analyser,
-        processor,
-        meterFrame: null
-      }
-      session.current = current
-      setInputLevel(0)
-      setMicrophone('active')
-      const samples = new Uint8Array(analyser.fftSize)
-      const measure = () => {
-        if (session.current !== current) return
-        analyser.getByteTimeDomainData(samples)
-        const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length)
-        // Speech is normally subtle in an unamplified time-domain signal, so
-        // map it to a readable meter without inventing motion during silence.
-        setInputLevel(Math.min(1, rms * 7))
-        current.meterFrame = requestAnimationFrame(measure)
-      }
-      stream.getAudioTracks().forEach((track) => {
-        track.onmute = () => setMicrophone('muted')
-        track.onunmute = () => setMicrophone('active')
-        track.onended = () => {
-          if (session.current === current) {
-            stopMeter(current)
-            setInputLevel(0)
-            setMicrophone('disconnected')
-          }
+  }, [])
+  const start = async (target: string) => {
+    if (session.current || pendingAudio.current || starting.current || saving.current || needsRefresh.current)
+      throw new Error('Save the current recording before starting another.')
+    destination.current = target
+    recordingOperation.current = crypto.randomUUID()
+    const operation = (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } })
+        const context = new AudioContext({ sampleRate: 16000 })
+        const processor = context.createScriptProcessor(4096, 1, 1)
+        const source = context.createMediaStreamSource(stream)
+        const analyser = context.createAnalyser()
+        analyser.fftSize = 512
+        chunks.current = []
+        processor.onaudioprocess = (event) => chunks.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+        source.connect(analyser)
+        source.connect(processor)
+        processor.connect(context.destination)
+        const current: RecordingSession = {
+          stream,
+          context,
+          source,
+          analyser,
+          processor,
+          meterFrame: null
         }
-      })
-      await context.resume()
-      current.meterFrame = requestAnimationFrame(measure)
-      setRecording(true)
-    } catch (error) {
-      onError(error)
-    }
-  }
-  const stop = async () => {
-    const current = session.current
-    if (!current) return
-    setRecording(false)
-    stopMeter(current)
-    setInputLevel(0)
-    current.processor.disconnect()
-    current.analyser.disconnect()
-    current.source.disconnect()
-    current.stream.getTracks().forEach((track) => track.stop())
-    await current.context.close()
-    const samples = chunks.current.reduce((size, chunk) => size + chunk.length, 0)
-    const wav = new ArrayBuffer(44 + samples * 2)
-    const view = new DataView(wav)
-    const write = (offset: number, value: string) =>
-      [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)))
-    write(0, 'RIFF')
-    view.setUint32(4, 36 + samples * 2, true)
-    write(8, 'WAVEfmt ')
-    view.setUint32(16, 16, true)
-    view.setUint16(20, 1, true)
-    view.setUint16(22, 1, true)
-    view.setUint32(24, 16000, true)
-    view.setUint32(28, 32000, true)
-    view.setUint16(32, 2, true)
-    view.setUint16(34, 16, true)
-    write(36, 'data')
-    view.setUint32(40, samples * 2, true)
-    let offset = 44
-    chunks.current.forEach((chunk) =>
-      chunk.forEach((sample) => {
-        view.setInt16(offset, Math.max(-1, Math.min(1, sample)) * 0x7fff, true)
-        offset += 2
-      })
-    )
+        session.current = current
+        setInputLevel(0)
+        setMicrophone('active')
+        const samples = new Uint8Array(analyser.fftSize)
+        let lastMeter = 0
+        const measure = (time: number) => {
+          if (session.current !== current) return
+          if (time - lastMeter < 50) {
+            current.meterFrame = requestAnimationFrame(measure)
+            return
+          }
+          lastMeter = time
+          analyser.getByteTimeDomainData(samples)
+          const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length)
+          // Speech is normally subtle in an unamplified time-domain signal, so
+          // map it to a readable meter without inventing motion during silence.
+          setInputLevel(Math.min(1, rms * 7))
+          current.meterFrame = requestAnimationFrame(measure)
+        }
+        stream.getAudioTracks().forEach((track) => {
+          track.onmute = () => setMicrophone('muted')
+          track.onunmute = () => setMicrophone('active')
+          track.onended = () => {
+            if (session.current === current) {
+              stopMeter(current)
+              setInputLevel(0)
+              setMicrophone('disconnected')
+            }
+          }
+        })
+        await context.resume()
+        current.meterFrame = requestAnimationFrame(measure)
+        setRecording(true)
+      } catch (error) {
+        const current = session.current
+        if (current) {
+          stopMeter(current)
+          current.stream.getTracks().forEach((track) => track.stop())
+          current.processor.disconnect()
+          current.source.disconnect()
+          current.analyser.disconnect()
+          void current.context.close()
+          session.current = null
+        }
+        throw error
+      }
+    })()
+    starting.current = operation
     try {
-      const bytes = new Uint8Array(wav)
-      let binary = ''
-      bytes.forEach((byte) => {
-        binary += String.fromCharCode(byte)
-      })
-      await window.researchNotebook.assets.saveRecording({ noteId, wavBase64: btoa(binary) })
-      await onSaved()
-    } catch (error) {
-      onError(error)
+      await operation
     } finally {
-      session.current = null
+      starting.current = null
     }
   }
+  const stop = (): Promise<void> => {
+    if (saving.current) return saving.current
+    const operation = (async () => {
+      await starting.current
+      const current = session.current
+      if (!current && !pendingAudio.current) {
+        if (needsRefresh.current) {
+          await onSaved()
+          needsRefresh.current = false
+          setFailed(false)
+        }
+        return
+      }
+      if (current) {
+        session.current = null
+        setRecording(false)
+        stopMeter(current)
+        setInputLevel(0)
+        current.processor.disconnect()
+        current.analyser.disconnect()
+        current.source.disconnect()
+        current.stream.getTracks().forEach((track) => track.stop())
+        await current.context.close().catch(() => undefined)
+        const samples = chunks.current.reduce((size, chunk) => size + chunk.length, 0)
+        const wav = new ArrayBuffer(44 + samples * 2)
+        const view = new DataView(wav)
+        const write = (offset: number, value: string) =>
+          [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)))
+        write(0, 'RIFF')
+        view.setUint32(4, 36 + samples * 2, true)
+        write(8, 'WAVEfmt ')
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true)
+        view.setUint16(22, 1, true)
+        view.setUint32(24, 16000, true)
+        view.setUint32(28, 32000, true)
+        view.setUint16(32, 2, true)
+        view.setUint16(34, 16, true)
+        write(36, 'data')
+        view.setUint32(40, samples * 2, true)
+        let offset = 44
+        chunks.current.forEach((chunk) =>
+          chunk.forEach((sample) => {
+            view.setInt16(offset, Math.max(-1, Math.min(1, sample)) * 0x7fff, true)
+            offset += 2
+          })
+        )
+        const bytes = new Uint8Array(wav)
+        let binary = ''
+        bytes.forEach((byte) => {
+          binary += String.fromCharCode(byte)
+        })
+        pendingAudio.current = btoa(binary)
+      }
+      try {
+        await window.researchNotebook.assets.saveRecording({
+          noteId: destination.current!,
+          wavBase64: pendingAudio.current!,
+          operationId: recordingOperation.current!
+        })
+        pendingAudio.current = null
+        needsRefresh.current = true
+        await onSaved()
+        needsRefresh.current = false
+        setFailed(false)
+      } catch (error) {
+        setFailed(true)
+        throw error
+      }
+    })()
+    saving.current = operation
+    void operation
+      .finally(() => {
+        saving.current = null
+      })
+      .catch(() => undefined)
+    return operation
+  }
+  useEffect(() => {
+    saves.setRecorder({ start, stop })
+  })
   useEffect(
     () => () => {
       const current = session.current
@@ -879,7 +1077,7 @@ function AudioRecorder({
       void current.context.close()
       session.current = null
     },
-    []
+    [stopMeter]
   )
   const meterLevel = Math.pow(inputLevel, 0.65)
   const status =
@@ -894,9 +1092,10 @@ function AudioRecorder({
         variant={recording ? 'danger' : 'ghost'}
         size="sm"
         aria-pressed={recording}
-        onClick={() => void (recording ? stop() : start())}
+        disabled={!noteId && !recording && !failed}
+        onClick={() => void (recording || failed ? stop() : start(noteId!)).catch(onError)}
       >
-        <Volume2 size={15} /> {recording ? 'Stop recording' : 'Record audio'}
+        <Volume2 size={15} /> {failed ? 'Retry save' : recording ? 'Stop recording' : 'Record audio'}
       </Button>
       {recording && (
         <span className={`recording-indicator microphone-${microphone}`} role="status" aria-live="polite">
@@ -922,13 +1121,42 @@ function AudioRecorder({
 }
 
 function TranscriptionPanel({ block, onError }: { block: Block; onError: (error: unknown) => void }): ReactElement {
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  const [provider, setProvider] = useState<'local' | 'openrouter'>('local')
+  const [readiness, setReadiness] = useState<import('../../../../shared/domain').TranscriptionSettings | null>(null)
+  useEffect(() => {
+    let alive = true
+    void window.researchNotebook.settings
+      .transcription()
+      .then((value) => {
+        if (alive) setReadiness(value)
+      })
+      .catch((value) => {
+        if (alive) onError(value)
+      })
+    return () => {
+      alive = false
+    }
+  }, [onError, provider])
   const [runs, setRuns] = useState<import('../../../../shared/domain').TranscriptionRun[]>([])
   const [progress, setProgress] = useState<number | null>(null)
-  const [provider, setProvider] = useState<'local' | 'openrouter'>('local')
   const [language, setLanguage] = useState('')
   const [busy, setBusy] = useState(false)
+  const report = useCallback(
+    (value: unknown) => {
+      if (mounted.current) onError(value)
+    },
+    [onError]
+  )
   const load = useCallback(async () => {
     const nextRuns = await window.researchNotebook.transcription.list({ blockId: block.id })
+    if (!mounted.current) return
     setRuns(nextRuns)
     const activeRun = nextRuns.find((run) => run.id === block.data.activeTranscriptionRunId) ?? nextRuns[0]
     if (!activeRun || activeRun.provider !== 'local' || !['queued', 'running'].includes(activeRun.status)) {
@@ -936,17 +1164,22 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
       return
     }
     const jobs = await window.researchNotebook.jobs.list()
+    if (!mounted.current) return
     setProgress(jobs.find((job) => job.transcriptionRunId === activeRun.id)?.progress ?? null)
   }, [block.data.activeTranscriptionRunId, block.id])
   useEffect(() => {
-    void load().catch(onError)
-  }, [load, onError])
+    void load().catch(report)
+  }, [load, report])
+  const canRun =
+    provider === 'openrouter'
+      ? Boolean(readiness?.openRouterConfigured)
+      : Boolean(readiness?.localBinaryAvailable && readiness.localModelAvailable)
   const active = runs.find((run) => run.id === block.data.activeTranscriptionRunId) ?? runs[0]
   useEffect(() => {
     if (!active || !['queued', 'running'].includes(active.status)) return
-    const timer = window.setInterval(() => void load().catch(onError), 1200)
+    const timer = window.setInterval(() => void load().catch(report), 1200)
     return () => window.clearInterval(timer)
-  }, [active, load, onError])
+  }, [active, load, report])
   const start = async () => {
     setBusy(true)
     try {
@@ -964,6 +1197,19 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
   }
   return (
     <div className="transcription">
+      <p role="status">
+        {!readiness
+          ? 'Checking transcription prerequisites…'
+          : provider === 'openrouter'
+            ? readiness.openRouterConfigured
+              ? 'Audio is sent to OpenRouter and its transcription provider. External service charges may apply.'
+              : 'Configure an OpenRouter key in Settings.'
+            : !readiness.localBinaryAvailable
+              ? 'Whisper runtime is missing. Install the bundled runtime; downloading a model does not install the runtime.'
+              : !readiness.localModelAvailable
+                ? 'Download and select a local model in Settings.'
+                : `Local runtime ready · ${readiness.selectedLocalModel?.displayName ?? 'Installed model'}`}
+      </p>
       <div>
         <select
           aria-label="Transcription provider"
@@ -981,7 +1227,7 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
             </option>
           ))}
         </select>
-        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void start()}>
+        <Button variant="secondary" size="sm" disabled={busy || !canRun} onClick={() => void start()}>
           Transcribe
         </Button>
       </div>

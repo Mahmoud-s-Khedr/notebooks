@@ -1,4 +1,4 @@
-import React, { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
+import React, { forwardRef, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -55,19 +55,31 @@ export function IconTip({ label, children }: { label: string; children: ReactNod
 export function Modal({
   title,
   children,
+  defaultCancel = false,
   open,
   onOpenChange
 }: {
   title: string
+  defaultCancel?: boolean
   children: ReactNode
   open: boolean
   onOpenChange: (open: boolean) => void
 }): ReactNode {
+  const content = useRef<HTMLDivElement>(null)
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content">
+        <Dialog.Content
+          ref={content}
+          className="dialog-content"
+          onOpenAutoFocus={(event) => {
+            if (defaultCancel) {
+              event.preventDefault()
+              content.current?.querySelector<HTMLButtonElement>('[data-default-cancel]')?.focus()
+            }
+          }}
+        >
           <div className="dialog-heading">
             <Dialog.Title>{title}</Dialog.Title>
             <Dialog.Close className="icon-button" aria-label={`Close ${title}`}>

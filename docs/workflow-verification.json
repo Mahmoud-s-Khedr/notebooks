@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-05T18:44:23.957Z",
+  "revision": "ae1dddb4d0ca5367eb0f02a1e9812aa884922d1c",
+  "buildSha256": "e62c82b4ae01ccde8f2cb873a81fa7a324b811e8642a34ead1e281989924c16b",
+  "workingTree": true,
+  "platform": "linux",
+  "isolatedLibrary": "/tmp/notebook-workflow-BJAR2X",
+  "observations": [
+    "PDF.js selectable text layer rendered in Electron",
+    "Real mouse drag selected PDF text",
+    "PDF zoom preserves edited extracted text",
+    "Invalid PDF page is clamped to document bounds",
+    "Source link from Write restores Research mode and printed-page provenance",
+    "Switching sources clears printed-page draft provenance",
+    "Cross-document source link restores the original source and printed page",
+    "PDF capture controls remain visible at 960 × 640",
+    "Failed recording save cancels mode navigation",
+    "Unavailable local runtime disables execution before a paid or local request",
+    "Permanent deletion defaults focus to Cancel",
+    "Lossless import immediately opens its first page",
+    "Failed recording save cancels window closure and retains Retry save",
+    "Window close saves exactly one additional recording and both recovered clips survive relaunch",
+    "Main/service write barrier rejects late writes while awaiting restart",
+    "Restart bootstrap activates the destination and retains the original",
+    "Original removal preserves the active imported and original notebooks"
+  ],
+  "limitations": [
+    "Synthetic microphone only.",
+    "Restart relaunch was intercepted to keep the harness in control; a fresh Electron process exercised the real bootstrap destination.",
+    "No cloud request or real Whisper execution."
+  ]
+}
