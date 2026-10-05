@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import type Database from 'better-sqlite3'
 import type {
@@ -32,6 +32,21 @@ export interface LocalModelStatus {
   modelPath: string
   available: boolean
   download: { state: 'idle' | 'downloading' | 'ready' | 'failed'; progress: number | null; error: string | null }
+}
+
+/**
+ * Linux packages the whisper.cpp shared objects next to the CLI. The dynamic
+ * linker does not look beside an executable by default, so retain any caller
+ * library paths while placing that bundled directory first.
+ */
+export function localWhisperEnvironment(
+  binaryPath: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): NodeJS.ProcessEnv {
+  if (platform !== 'linux') return environment
+  const libraryPath = [dirname(binaryPath), environment.LD_LIBRARY_PATH].filter(Boolean).join(delimiter)
+  return { ...environment, LD_LIBRARY_PATH: libraryPath }
 }
 
 /** Downloads are deliberately owned by main process; no renderer path or URL access is exposed. */
@@ -242,7 +257,11 @@ export class WhisperCppProvider implements TranscriptionProvider {
     let stderr = ''
     try {
       await new Promise<void>((resolveRun, rejectRun) => {
-        child = spawn(binaryPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+        child = spawn(binaryPath, args, {
+          windowsHide: true,
+          stdio: ['ignore', 'ignore', 'pipe'],
+          env: localWhisperEnvironment(binaryPath)
+        })
         child.stderr?.on('data', (chunk: Buffer) => {
           stderr += chunk.toString('utf8')
           if (stderr.length > 1000) stderr = stderr.slice(-1000)

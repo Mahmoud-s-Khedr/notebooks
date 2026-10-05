@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type ReactElement
+} from 'react'
 import { Copy, FileText, GripVertical, Link2, MoreHorizontal, Plus, Trash2, Type, Volume2, X } from 'lucide-react'
 import {
   textBlockTypes,
@@ -186,6 +194,8 @@ function NoteEditor({
   onViewSource: () => void
 }): ReactElement {
   const [slashOpen, setSlashOpen] = useState(false)
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const createBlock = async (type: TextBlockType = 'text') => {
     try {
       await window.researchNotebook.blocks.create({ noteId: note.id, type, data: { text: '' } })
@@ -207,6 +217,43 @@ function NoteEditor({
       onError(error)
     }
   }
+  const reorderBlocks = async (draggedId: string, targetId: string, position: 'before' | 'after') => {
+    if (draggedId === targetId) return
+    const ids = note.blocks.map(({ id }) => id)
+    const from = ids.indexOf(draggedId)
+    const target = ids.indexOf(targetId)
+    if (from < 0 || target < 0) return
+    ids.splice(from, 1)
+    const targetAfterRemoval = ids.indexOf(targetId)
+    ids.splice(targetAfterRemoval + (position === 'after' ? 1 : 0), 0, draggedId)
+    try {
+      await window.researchNotebook.blocks.reorder({ noteId: note.id, blockIds: ids })
+      await reloadWorkspace()
+    } catch (error) {
+      onError(error)
+    }
+  }
+  const startDragging = (event: DragEvent<HTMLButtonElement>, blockId: string) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', blockId)
+    setDraggedBlockId(blockId)
+  }
+  const dragOverBlock = (event: DragEvent<HTMLElement>, blockId: string) => {
+    const activeId = draggedBlockId ?? event.dataTransfer.getData('text/plain')
+    if (!activeId || activeId === blockId) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const bounds = event.currentTarget.getBoundingClientRect()
+    setDropTarget({ id: blockId, position: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' })
+  }
+  const dropOnBlock = (event: DragEvent<HTMLElement>, blockId: string) => {
+    event.preventDefault()
+    const draggedId = draggedBlockId ?? event.dataTransfer.getData('text/plain')
+    const position = dropTarget?.id === blockId ? dropTarget.position : 'before'
+    setDraggedBlockId(null)
+    setDropTarget(null)
+    if (draggedId) void reorderBlocks(draggedId, blockId, position)
+  }
   return (
     <article
       className={`note-document ${active ? 'focused-note' : ''}`}
@@ -221,6 +268,15 @@ function NoteEditor({
           canMoveUp={index > 0}
           canMoveDown={index < note.blocks.length - 1}
           onMove={(direction) => void moveBlock(block, direction)}
+          isDragging={draggedBlockId === block.id}
+          dropPosition={dropTarget?.id === block.id ? dropTarget.position : null}
+          onDragStart={(event) => startDragging(event, block.id)}
+          onDragOver={(event) => dragOverBlock(event, block.id)}
+          onDrop={(event) => dropOnBlock(event, block.id)}
+          onDragEnd={() => {
+            setDraggedBlockId(null)
+            setDropTarget(null)
+          }}
           onSaved={reloadWorkspace}
           onError={onError}
           onTrashed={onTrashed}
@@ -306,6 +362,12 @@ function BlockEditor({
   canMoveUp,
   canMoveDown,
   onMove,
+  isDragging,
+  dropPosition,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
   onSaved,
   onError,
   onTrashed,
@@ -316,6 +378,12 @@ function BlockEditor({
   canMoveUp: boolean
   canMoveDown: boolean
   onMove: (direction: -1 | 1) => void
+  isDragging: boolean
+  dropPosition: 'before' | 'after' | null
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void
+  onDragOver: (event: DragEvent<HTMLElement>) => void
+  onDrop: (event: DragEvent<HTMLElement>) => void
+  onDragEnd: () => void
   onSaved: () => Promise<void>
   onError: (error: unknown) => void
   onTrashed: () => Promise<void>
@@ -380,9 +448,26 @@ function BlockEditor({
     }
   }
   return (
-    <section className={`semantic-block type-${block.type}`} data-item-id={block.id}>
+    <section
+      className={`semantic-block type-${block.type}${isDragging ? ' is-dragging' : ''}${
+        dropPosition ? ` drop-${dropPosition}` : ''
+      }`}
+      data-item-id={block.id}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <div className="block-label">
-        <GripVertical size={15} />
+        <button
+          className="block-drag-handle"
+          type="button"
+          draggable
+          aria-label={`Drag ${label(block.type)} block to reorder`}
+          title="Drag to reorder"
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+        >
+          <GripVertical size={15} />
+        </button>
         <span>{label(block.type)}</span>
       </div>
       <div className="block-main">
@@ -666,18 +751,68 @@ function AudioRecorder({
   onError: (error: unknown) => void
 }): ReactElement {
   const [recording, setRecording] = useState(false)
+  const [inputLevel, setInputLevel] = useState(0)
+  const [microphone, setMicrophone] = useState<'active' | 'muted' | 'disconnected'>('active')
   const chunks = useRef<Float32Array[]>([])
-  const session = useRef<{ stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode } | null>(null)
+  const session = useRef<{
+    stream: MediaStream
+    context: AudioContext
+    source: MediaStreamAudioSourceNode
+    analyser: AnalyserNode
+    processor: ScriptProcessorNode
+    meterFrame: number | null
+  } | null>(null)
+  const stopMeter = (current: NonNullable<typeof session.current>) => {
+    if (current.meterFrame !== null) cancelAnimationFrame(current.meterFrame)
+    current.meterFrame = null
+  }
   const start = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } })
       const context = new AudioContext({ sampleRate: 16000 })
       const processor = context.createScriptProcessor(4096, 1, 1)
+      const source = context.createMediaStreamSource(stream)
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 512
       chunks.current = []
       processor.onaudioprocess = (event) => chunks.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
-      context.createMediaStreamSource(stream).connect(processor)
+      source.connect(analyser)
+      source.connect(processor)
       processor.connect(context.destination)
-      session.current = { stream, context, processor }
+      const current: NonNullable<typeof session.current> = {
+        stream,
+        context,
+        source,
+        analyser,
+        processor,
+        meterFrame: null
+      }
+      session.current = current
+      setInputLevel(0)
+      setMicrophone('active')
+      const samples = new Uint8Array(analyser.fftSize)
+      const measure = () => {
+        if (session.current !== current) return
+        analyser.getByteTimeDomainData(samples)
+        const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length)
+        // Speech is normally subtle in an unamplified time-domain signal, so
+        // map it to a readable meter without inventing motion during silence.
+        setInputLevel(Math.min(1, rms * 7))
+        current.meterFrame = requestAnimationFrame(measure)
+      }
+      stream.getAudioTracks().forEach((track) => {
+        track.onmute = () => setMicrophone('muted')
+        track.onunmute = () => setMicrophone('active')
+        track.onended = () => {
+          if (session.current === current) {
+            stopMeter(current)
+            setInputLevel(0)
+            setMicrophone('disconnected')
+          }
+        }
+      })
+      await context.resume()
+      current.meterFrame = requestAnimationFrame(measure)
       setRecording(true)
     } catch (error) {
       onError(error)
@@ -687,7 +822,11 @@ function AudioRecorder({
     const current = session.current
     if (!current) return
     setRecording(false)
+    stopMeter(current)
+    setInputLevel(0)
     current.processor.disconnect()
+    current.analyser.disconnect()
+    current.source.disconnect()
     current.stream.getTracks().forEach((track) => track.stop())
     await current.context.close()
     const samples = chunks.current.reduce((size, chunk) => size + chunk.length, 0)
@@ -728,6 +867,27 @@ function AudioRecorder({
       session.current = null
     }
   }
+  useEffect(
+    () => () => {
+      const current = session.current
+      if (!current) return
+      stopMeter(current)
+      current.processor.disconnect()
+      current.analyser.disconnect()
+      current.source.disconnect()
+      current.stream.getTracks().forEach((track) => track.stop())
+      void current.context.close()
+      session.current = null
+    },
+    []
+  )
+  const meterLevel = Math.pow(inputLevel, 0.65)
+  const status =
+    microphone === 'disconnected'
+      ? 'Microphone disconnected'
+      : microphone === 'muted'
+        ? 'Microphone muted'
+        : 'Recording'
   return (
     <div className="audio-recorder-control">
       <Button
@@ -739,12 +899,20 @@ function AudioRecorder({
         <Volume2 size={15} /> {recording ? 'Stop recording' : 'Record audio'}
       </Button>
       {recording && (
-        <span className="recording-indicator" role="status" aria-live="polite">
+        <span className={`recording-indicator microphone-${microphone}`} role="status" aria-live="polite">
           <span className="recording-dot" />
-          <span>Recording</span>
-          <span className="recording-waves" aria-hidden="true">
-            {[0, 1, 2, 3, 4].map((bar) => (
-              <i key={bar} style={{ '--wave-delay': `${bar * 90}ms` } as CSSProperties} />
+          <span>{status}</span>
+          <span className="recording-waves" aria-label={`Microphone input level ${Math.round(inputLevel * 100)}%`}>
+            {[0.45, 0.72, 1, 0.72, 0.45].map((multiplier, bar) => (
+              <i
+                key={bar}
+                style={
+                  {
+                    height: `${Math.round(3 + 14 * meterLevel * multiplier)}px`,
+                    opacity: 0.4 + meterLevel * 0.6
+                  } as CSSProperties
+                }
+              />
             ))}
           </span>
         </span>

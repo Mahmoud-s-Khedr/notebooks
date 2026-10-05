@@ -40,7 +40,10 @@ export function SourceWorkspace({
   const [url, setUrl] = useState('')
   const [page, setPage] = useState(1)
   const [pageCount, setPageCount] = useState(0)
-  const [zoom, setZoom] = useState(1.1)
+  // A null zoom follows the available pane width. Once the reader changes the
+  // zoom controls, it becomes an explicit scale and is left alone.
+  const [zoom, setZoom] = useState<number | null>(null)
+  const [fitZoom, setFitZoom] = useState(1)
   const [printedPage, setPrintedPage] = useState('')
   const [selection, setSelection] = useState('')
   const [region, setRegion] = useState<Rectangle | null>(null)
@@ -65,6 +68,9 @@ export function SourceWorkspace({
     }
     void window.researchNotebook.assets.dataUrl({ assetId: source.assetId }).then(setUrl).catch(onError)
   }, [source, onError])
+  useEffect(() => {
+    setZoom(null)
+  }, [url])
   useEffect(() => {
     const open = (event: Event) => {
       const detail = (event as CustomEvent<{ sourceDocumentId: string; pdfPage: number | null }>).detail
@@ -199,6 +205,7 @@ export function SourceWorkspace({
           url={url}
           page={page}
           zoom={zoom}
+          onFitZoom={setFitZoom}
           onPageCount={setPageCount}
           onText={setSelection}
           onRegion={setRegion}
@@ -252,16 +259,16 @@ export function SourceWorkspace({
               variant="ghost"
               size="icon"
               aria-label="Zoom out"
-              onClick={() => setZoom((value) => Math.max(0.65, value - 0.1))}
+              onClick={() => setZoom((value) => Math.max(0.65, (value ?? fitZoom) - 0.1))}
             >
               <Minus size={16} />
             </Button>
-            <span className="zoom-label">{Math.round(zoom * 100)}%</span>
+            <span className="zoom-label">{Math.round((zoom ?? fitZoom) * 100)}%</span>
             <Button
               variant="ghost"
               size="icon"
               aria-label="Zoom in"
-              onClick={() => setZoom((value) => Math.min(2.1, value + 0.1))}
+              onClick={() => setZoom((value) => Math.min(2.1, (value ?? fitZoom) + 0.1))}
             >
               <Plus size={16} />
             </Button>
@@ -305,6 +312,7 @@ function PdfCanvas({
   url,
   page,
   zoom,
+  onFitZoom,
   onPageCount,
   onText,
   onRegion,
@@ -313,7 +321,8 @@ function PdfCanvas({
 }: {
   url: string
   page: number
-  zoom: number
+  zoom: number | null
+  onFitZoom: (zoom: number) => void
   onPageCount: (count: number) => void
   onText: (text: string) => void
   onRegion: (region: Rectangle | null) => void
@@ -322,15 +331,35 @@ function PdfCanvas({
 }): ReactElement {
   const canvas = useRef<HTMLCanvasElement>(null)
   const wrapper = useRef<HTMLDivElement>(null)
+  const scroll = useRef<HTMLDivElement>(null)
   const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pageWidth, setPageWidth] = useState(0)
+  const [availableWidth, setAvailableWidth] = useState(0)
+  const fitZoom = pageWidth && availableWidth ? Math.max(0.1, availableWidth / pageWidth) : 1
+  const effectiveZoom = zoom ?? fitZoom
+  useEffect(() => {
+    const updateWidth = () => setAvailableWidth(Math.max(0, (scroll.current?.clientWidth ?? 0) - 4))
+    updateWidth()
+    const observer = typeof ResizeObserver === 'undefined' || !scroll.current ? null : new ResizeObserver(updateWidth)
+    if (scroll.current) observer?.observe(scroll.current)
+    window.addEventListener('resize', updateWidth)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updateWidth)
+    }
+  }, [])
+  useEffect(() => {
+    if (zoom === null && pageWidth && availableWidth) onFitZoom(fitZoom)
+  }, [availableWidth, fitZoom, onFitZoom, pageWidth, zoom])
   useEffect(() => {
     let active = true
     const loadingTask = pdfjs.getDocument({ url })
     setLoading(true)
     setError(null)
     setDoc(null)
+    setPageWidth(0)
     onPageCount(0)
     void loadingTask.promise
       .then((pdf) => {
@@ -362,8 +391,10 @@ function PdfCanvas({
       const safePage = Math.min(Math.max(page, 1), doc.numPages)
       const pdfPage = await doc.getPage(safePage)
       if (!active || !canvas.current) return
+      const baseViewport = pdfPage.getViewport({ scale: 1 })
+      if (active) setPageWidth(baseViewport.width)
       const deviceScale = Math.min(window.devicePixelRatio || 1, 2)
-      const viewport = pdfPage.getViewport({ scale: zoom * deviceScale })
+      const viewport = pdfPage.getViewport({ scale: effectiveZoom * deviceScale })
       const target = canvas.current
       target.width = Math.ceil(viewport.width)
       target.height = Math.ceil(viewport.height)
@@ -387,7 +418,7 @@ function PdfCanvas({
       active = false
       renderTask?.cancel()
     }
-  }, [doc, page, zoom, onText])
+  }, [doc, effectiveZoom, onText, page])
   const start = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.max(0, event.clientX - rect.left)
@@ -431,7 +462,7 @@ function PdfCanvas({
     })
   }
   return (
-    <div className="pdf-scroll">
+    <div className="pdf-scroll" ref={scroll}>
       <div
         className="pdf-stage"
         ref={wrapper}

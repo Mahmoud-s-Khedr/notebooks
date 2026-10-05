@@ -22,4 +22,8 @@ for (const [platform, filename] of sidecars) {
     throw new Error(`Missing pinned whisper.cpp sidecar for ${platform}.`)
   const actual = createHash('sha256').update(readFileSync(path)).digest('hex')
   if (actual !== expected) throw new Error(`Checksum mismatch for ${platform} whisper.cpp sidecar.`)
+  // The Linux CLI is dynamically linked. The loader requests this exact SONAME,
+  // so the file (or symlink) must travel with the executable into extraResources.
+  if (platform === 'linux' && !existsSync(join(root, platform, 'libwhisper.so.1')))
+    throw new Error('Missing resources/whisper.cpp/linux/libwhisper.so.1 required by the Linux Whisper sidecar.')
 }

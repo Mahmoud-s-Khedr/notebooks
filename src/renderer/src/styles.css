@@ -189,13 +189,6 @@ kbd {
   box-shadow: 0 1px 3px #20364b1d;
   color: #0b5fc6;
 }
-.sidebar-reopen {
-  position: fixed !important;
-  z-index: 3;
-  left: 10px;
-  top: 10px;
-  box-shadow: 0 1px 5px #182a3a22;
-}
 .button {
   display: inline-flex;
   align-items: center;
@@ -475,6 +468,27 @@ kbd {
   min-height: 118px;
   border-bottom: 1px solid var(--border);
 }
+.semantic-block.is-dragging {
+  opacity: 0.45;
+}
+.semantic-block.drop-before::after,
+.semantic-block.drop-after::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  content: '';
+  pointer-events: none;
+}
+.semantic-block.drop-before::after {
+  top: -2px;
+}
+.semantic-block.drop-after::after {
+  bottom: -2px;
+}
 .semantic-block::before {
   content: '';
   position: absolute;
@@ -510,6 +524,26 @@ kbd {
 }
 .block-label svg {
   color: #9ba9ba;
+}
+.block-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: -3px 0 0 -4px;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: grab;
+}
+.block-drag-handle:hover,
+.block-drag-handle:focus-visible {
+  background: #eaf1fa;
+  outline: 0;
+}
+.block-drag-handle:active {
+  cursor: grabbing;
 }
 .block-main {
   position: relative;

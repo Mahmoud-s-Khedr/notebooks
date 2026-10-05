@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import { TestLibrary, validWav } from '../test-support'
-import { TranscriptionService, type TranscriptionProvider } from './transcription-service'
+import { localWhisperEnvironment, TranscriptionService, type TranscriptionProvider } from './transcription-service'
 import { JobService } from './job-service'
 
 describe('TranscriptionService disk state recovery', () => {
@@ -32,6 +32,17 @@ describe('TranscriptionService disk state recovery', () => {
         localDownload: { state: 'idle', progress: null, error: null }
       })
     )
+
+  it('makes bundled Linux Whisper libraries discoverable without discarding existing paths', () => {
+    expect(
+      localWhisperEnvironment('/opt/research/whisper-cli', { LD_LIBRARY_PATH: '/usr/local/lib' }, 'linux')
+    ).toEqual({
+      LD_LIBRARY_PATH: '/opt/research:/usr/local/lib'
+    })
+    expect(localWhisperEnvironment('C:\\Research\\whisper-cli.exe', { Path: 'existing' }, 'win32')).toEqual({
+      Path: 'existing'
+    })
+  })
 
   it('persists completed, failed, cancelled, and retried runs without secrets or audio paths', async () => {
     const { library, block } = audioFixture()

@@ -114,6 +114,33 @@ describe('PageWorkspace core writing workflow', () => {
     )
   })
 
+  it('reorders blocks by dropping a drag handle above or below another block', async () => {
+    const first = block({ id: 'first', data: { text: 'First' } })
+    const second = block({ id: 'second', position: 1, data: { text: 'Second' } })
+    renderWorkspace({ notes: [{ ...note(), blocks: [first, second] }] })
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      data: new Map<string, string>(),
+      setData(type: string, value: string) {
+        this.data.set(type, value)
+      },
+      getData(type: string) {
+        return this.data.get(type) ?? ''
+      }
+    }
+    const handles = screen.getAllByRole('button', { name: 'Drag text block to reorder' })
+    const target = screen.getAllByRole('textbox', { name: 'text block' })[1].closest('section')!
+
+    fireEvent.dragStart(handles[0], { dataTransfer })
+    fireEvent.dragOver(target, { dataTransfer, clientY: 0 })
+    fireEvent.drop(target, { dataTransfer })
+
+    await waitFor(() =>
+      expect(api.blocks.reorder).toHaveBeenCalledWith({ noteId: 'note-1', blockIds: ['second', 'first'] })
+    )
+  })
+
   it('links blocks in the inspector and routes trash and relation failures to the error callback', async () => {
     const user = userEvent.setup()
     const onError = vi.fn()

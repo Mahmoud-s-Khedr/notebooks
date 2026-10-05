@@ -65,12 +65,29 @@
 .recording-waves i {
   display: block;
   width: 2px;
-  height: 5px;
   border-radius: 2px;
   background: currentColor;
-  transform-origin: center;
-  animation: recording-wave 720ms ease-in-out infinite alternate;
-  animation-delay: var(--wave-delay);
+}
+.recording-indicator.microphone-muted {
+  border-color: #e4c77a;
+  background: #fff9e9;
+  color: #8a6512;
+}
+.recording-indicator.microphone-disconnected {
+  border-color: #e7b3b3;
+  background: #fff1f1;
+  color: #a43232;
+}
+.microphone-muted .recording-dot,
+.microphone-disconnected .recording-dot {
+  animation: none;
+  box-shadow: none;
+}
+.microphone-muted .recording-dot {
+  background: #c69623;
+}
+.microphone-disconnected .recording-dot {
+  background: #c83d3d;
 }
 @keyframes recording-pulse {
   70% {
@@ -78,16 +95,6 @@
   }
   100% {
     box-shadow: 0 0 0 0 transparent;
-  }
-}
-@keyframes recording-wave {
-  from {
-    transform: scaleY(0.45);
-    opacity: 0.6;
-  }
-  to {
-    transform: scaleY(2.1);
-    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {

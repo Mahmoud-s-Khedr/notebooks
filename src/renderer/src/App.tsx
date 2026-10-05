@@ -4,9 +4,9 @@ import {
   ChevronDown,
   FilePlus2,
   FolderPlus,
-  Menu,
   MoreHorizontal,
   PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Trash2
 } from 'lucide-react'
@@ -185,11 +185,19 @@ export function App(): ReactElement {
       )}
       <section className="application-main">
         <header className="app-toolbar">
-          <IconTip label="Collapse sidebar">
-            <Button variant="icon" aria-label="Collapse notebook sidebar" onClick={() => setSidebarCollapsed(true)}>
-              <PanelLeftClose size={18} />
-            </Button>
-          </IconTip>
+          {sidebarCollapsed ? (
+            <IconTip label="Expand sidebar">
+              <Button variant="icon" aria-label="Expand notebook sidebar" onClick={() => setSidebarCollapsed(false)}>
+                <PanelLeftOpen size={18} />
+              </Button>
+            </IconTip>
+          ) : (
+            <IconTip label="Collapse sidebar">
+              <Button variant="icon" aria-label="Collapse notebook sidebar" onClick={() => setSidebarCollapsed(true)}>
+                <PanelLeftClose size={18} />
+              </Button>
+            </IconTip>
+          )}
           <button className="command-search" onClick={() => setPaletteOpen(true)}>
             <Search size={17} />
             <span>Search notes, sources, or ask…</span>
@@ -258,16 +266,6 @@ export function App(): ReactElement {
           <Empty onNewNotebook={createNotebook} />
         )}
       </section>
-      {sidebarCollapsed && (
-        <Button
-          className="sidebar-reopen"
-          variant="icon"
-          aria-label="Expand notebook sidebar"
-          onClick={() => setSidebarCollapsed(false)}
-        >
-          <Menu size={18} />
-        </Button>
-      )}
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
