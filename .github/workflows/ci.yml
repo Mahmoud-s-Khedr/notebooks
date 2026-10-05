@@ -65,6 +65,11 @@ jobs:
           cmake --build third_party/whisper.cpp/build --target whisper-cli --parallel 2
           mkdir -p resources/whisper.cpp/linux
           cp third_party/whisper.cpp/build/bin/whisper-cli resources/whisper.cpp/linux/whisper-cli
+          LIBWHISPER="$(find third_party/whisper.cpp/build \
+            \( -name 'libwhisper.so.1' -o -name 'libwhisper.so.1.*' \) \
+            -print -quit)"
+          test -n "$LIBWHISPER"
+          cp -L "$LIBWHISPER" resources/whisper.cpp/linux/libwhisper.so.1
           printf '{\n  "linux/whisper-cli": "%s"\n}\n' "$(sha256sum resources/whisper.cpp/linux/whisper-cli | awk '{print $1}')" > resources/whisper.cpp/checksums.json
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
