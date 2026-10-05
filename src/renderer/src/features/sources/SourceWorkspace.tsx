@@ -12,10 +12,35 @@ import {
 } from 'lucide-react'
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import jbig2WasmUrl from 'pdfjs-dist/wasm/jbig2.wasm?url'
+import jbig2NoWasmFallbackUrl from 'pdfjs-dist/wasm/jbig2_nowasm_fallback.js?url'
+import openJpegWasmUrl from 'pdfjs-dist/wasm/openjpeg.wasm?url'
+import openJpegNoWasmFallbackUrl from 'pdfjs-dist/wasm/openjpeg_nowasm_fallback.js?url'
+import qcmsWasmUrl from 'pdfjs-dist/wasm/qcms_bg.wasm?url'
+import quickJsLoaderUrl from 'pdfjs-dist/wasm/quickjs-eval.js?url'
+import quickJsWasmUrl from 'pdfjs-dist/wasm/quickjs-eval.wasm?url'
 import type { AssetKind, PageWorkspace, SourceDocument } from '../../../../shared/domain'
 import { Button, DropdownMenu } from '../../components/ui'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+
+// The decoder is requested as `${wasmUrl}<decoder filename>`. Every import is
+// intentionally retained so the matching decoder and fallback files are
+// emitted beside one another in both development and packaged builds.
+const pdfjsWasmUrls = [
+  jbig2WasmUrl,
+  jbig2NoWasmFallbackUrl,
+  openJpegWasmUrl,
+  openJpegNoWasmFallbackUrl,
+  qcmsWasmUrl,
+  quickJsLoaderUrl,
+  quickJsWasmUrl
+]
+const pdfjsWasmUrl = jbig2WasmUrl.replace(/jbig2\.wasm(?:\?.*)?$/, '')
+
+if (!pdfjsWasmUrls.every((url) => url.startsWith(pdfjsWasmUrl))) {
+  throw new Error('PDF.js decoder assets must be emitted into one directory.')
+}
 
 type Props = {
   notebookId: string | null
@@ -355,7 +380,7 @@ function PdfCanvas({
   }, [availableWidth, fitZoom, onFitZoom, pageWidth, zoom])
   useEffect(() => {
     let active = true
-    const loadingTask = pdfjs.getDocument({ url })
+    const loadingTask = pdfjs.getDocument({ url, wasmUrl: pdfjsWasmUrl })
     setLoading(true)
     setError(null)
     setDoc(null)
