@@ -125,6 +125,7 @@ export type ResearchNotebookApiMock = {
 const job = (): Job => ({
   id: 'job-1',
   kind: 'export',
+  transcriptionRunId: null,
   status: 'completed',
   progress: 100,
   errorMessage: null,

@@ -6,6 +6,7 @@ import {
   localWhisperEnvironment,
   redactWhisperDiagnostic,
   TranscriptionService,
+  whisperProgressUpdates,
   type TranscriptionProvider
 } from './transcription-service'
 import { JobService } from './job-service'
@@ -64,6 +65,17 @@ describe('TranscriptionService disk state recovery', () => {
     expect(redactWhisperDiagnostic('spawn /private/audio.wav Bearer secret-value')).toBe(
       'spawn [path redacted] [redacted]'
     )
+  })
+
+  it('extracts only forward Whisper CLI progress updates from stderr', () => {
+    const output = [
+      'whisper_print_progress_callback: progress =   5%',
+      'whisper_print_progress_callback: progress =  10%',
+      'whisper_print_progress_callback: progress =  10%',
+      'whisper_print_progress_callback: progress = 105%'
+    ].join('\n')
+    expect(whisperProgressUpdates(output)).toEqual([5, 10])
+    expect(whisperProgressUpdates(output, 5)).toEqual([10])
   })
 
   it('persists completed, failed, cancelled, and retried runs without secrets or audio paths', async () => {

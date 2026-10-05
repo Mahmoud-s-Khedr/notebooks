@@ -202,6 +202,8 @@ export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancell
 export interface Job {
   id: string
   kind: JobKind
+  /** The transcription run served by this job, when applicable. */
+  transcriptionRunId: string | null
   status: JobStatus
   progress: number
   errorMessage: string | null

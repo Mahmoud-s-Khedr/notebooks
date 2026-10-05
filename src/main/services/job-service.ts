@@ -24,18 +24,22 @@ const clean = (value: unknown): string =>
     .replace(/(?:bearer\s+)?[A-Za-z0-9_-]{20,}/gi, '[redacted]')
     .replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]')
     .slice(0, 300)
-const job = (row: Row): Job => ({
-  id: row.id,
-  kind: row.kind,
-  status: row.status,
-  progress: row.progress,
-  errorMessage: row.error_message,
-  result: row.result_json ? (JSON.parse(row.result_json) as Record<string, unknown>) : null,
-  attempts: row.attempts,
-  createdAt: row.created_at,
-  startedAt: row.started_at,
-  completedAt: row.completed_at
-})
+const job = (row: Row): Job => {
+  const payload = JSON.parse(row.payload_json) as Record<string, unknown>
+  return {
+    id: row.id,
+    kind: row.kind,
+    transcriptionRunId: row.kind === 'transcription' && typeof payload.runId === 'string' ? payload.runId : null,
+    status: row.status,
+    progress: row.progress,
+    errorMessage: row.error_message,
+    result: row.result_json ? (JSON.parse(row.result_json) as Record<string, unknown>) : null,
+    attempts: row.attempts,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at
+  }
+}
 
 /** Main-process queue. Payloads only contain IDs/options; never user content or paths in diagnostics. */
 export class JobService {

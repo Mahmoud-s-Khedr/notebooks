@@ -72,6 +72,20 @@ export function formatWhisperFailure(diagnostic: string, code: number | null, si
   return detail.length > 700 ? `…${detail.slice(-699)}` : detail
 }
 
+/** Extract monotonically increasing progress updates from whisper.cpp CLI stderr. */
+export function whisperProgressUpdates(output: string, after = 0): number[] {
+  const updates: number[] = []
+  let latest = after
+  for (const match of output.matchAll(/\bprogress\s*=\s*(\d{1,3})%/g)) {
+    const value = Number(match[1])
+    if (Number.isFinite(value) && value > latest && value <= 100) {
+      updates.push(value)
+      latest = value
+    }
+  }
+  return updates
+}
+
 /** Downloads are deliberately owned by main process; no renderer path or URL access is exposed. */
 export class WhisperModelManager {
   // These are the multilingual ggml release artifacts. The revision is pinned so a
@@ -274,10 +288,13 @@ export class WhisperCppProvider implements TranscriptionProvider {
     const binaryPath = paths.binaryPath
     const modelPath = paths.modelPath
     const output = `${input.audioPath}.${randomUUID()}.txt`
-    const args = ['-m', modelPath, '-f', input.audioPath, '-otxt', '-oj', '-of', output.replace(/\.txt$/, '')]
+    // whisper.cpp only emits its percentage callbacks when explicitly asked. Those
+    // callbacks arrive on stderr and feed the persistent job's checkpoints below.
+    const args = ['-m', modelPath, '-f', input.audioPath, '-otxt', '-oj', '-pp', '-of', output.replace(/\.txt$/, '')]
     if (input.language) args.push('-l', input.language)
     let child: ReturnType<typeof spawn> | null = null
     let stderr = ''
+    let reportedProgress = 0
     try {
       await new Promise<void>((resolveRun, rejectRun) => {
         child = spawn(binaryPath, args, {
@@ -288,6 +305,14 @@ export class WhisperCppProvider implements TranscriptionProvider {
         child.stderr?.on('data', (chunk: Buffer) => {
           stderr += chunk.toString('utf8')
           if (stderr.length > 1000) stderr = stderr.slice(-1000)
+          // Current whisper.cpp CLI output is:
+          // "whisper_print_progress_callback: progress =   5%".
+          // Read all matches because a single stderr chunk can contain multiple
+          // progress updates, and ignore a repeated/older value defensively.
+          for (const value of whisperProgressUpdates(stderr, reportedProgress)) {
+            reportedProgress = value
+            input.progress?.(value)
+          }
         })
         let terminated = false
         const timer = setInterval(() => {

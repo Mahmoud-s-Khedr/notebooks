@@ -923,17 +923,30 @@ function AudioRecorder({
 
 function TranscriptionPanel({ block, onError }: { block: Block; onError: (error: unknown) => void }): ReactElement {
   const [runs, setRuns] = useState<import('../../../../shared/domain').TranscriptionRun[]>([])
+  const [progress, setProgress] = useState<number | null>(null)
   const [provider, setProvider] = useState<'local' | 'openrouter'>('local')
   const [language, setLanguage] = useState('')
   const [busy, setBusy] = useState(false)
-  const load = useCallback(
-    async () => setRuns(await window.researchNotebook.transcription.list({ blockId: block.id })),
-    [block.id]
-  )
+  const load = useCallback(async () => {
+    const nextRuns = await window.researchNotebook.transcription.list({ blockId: block.id })
+    setRuns(nextRuns)
+    const activeRun = nextRuns.find((run) => run.id === block.data.activeTranscriptionRunId) ?? nextRuns[0]
+    if (!activeRun || activeRun.provider !== 'local' || !['queued', 'running'].includes(activeRun.status)) {
+      setProgress(null)
+      return
+    }
+    const jobs = await window.researchNotebook.jobs.list()
+    setProgress(jobs.find((job) => job.transcriptionRunId === activeRun.id)?.progress ?? null)
+  }, [block.data.activeTranscriptionRunId, block.id])
   useEffect(() => {
     void load().catch(onError)
   }, [load, onError])
   const active = runs.find((run) => run.id === block.data.activeTranscriptionRunId) ?? runs[0]
+  useEffect(() => {
+    if (!active || !['queued', 'running'].includes(active.status)) return
+    const timer = window.setInterval(() => void load().catch(onError), 1200)
+    return () => window.clearInterval(timer)
+  }, [active, load, onError])
   const start = async () => {
     setBusy(true)
     try {
@@ -975,6 +988,7 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
       {active && (
         <small>
           {active.provider} · {active.status}
+          {progress !== null ? ` · ${progress}%` : ''}
           {active.transcriptText ? ` · ${active.transcriptText}` : ''}
         </small>
       )}
