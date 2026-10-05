@@ -65,12 +65,42 @@ jobs:
           cmake --build third_party/whisper.cpp/build --target whisper-cli --parallel 2
           mkdir -p resources/whisper.cpp/linux
           cp third_party/whisper.cpp/build/bin/whisper-cli resources/whisper.cpp/linux/whisper-cli
-          LIBWHISPER="$(find third_party/whisper.cpp/build \
-            \( -name 'libwhisper.so.1' -o -name 'libwhisper.so.1.*' \) \
-            -print -quit)"
-          test -n "$LIBWHISPER"
-          cp -L "$LIBWHISPER" resources/whisper.cpp/linux/libwhisper.so.1
-          printf '{\n  "linux/whisper-cli": "%s"\n}\n' "$(sha256sum resources/whisper.cpp/linux/whisper-cli | awk '{print $1}')" > resources/whisper.cpp/checksums.json
+          # Copy the complete whisper.cpp runtime dependency closure. whisper-cli
+          # directly needs libwhisper/libggml, while libwhisper also needs the
+          # ggml base and CPU libraries. Copying only libwhisper makes the
+          # package start failing at the next missing SONAME.
+          copy_whisper_dependency() {
+            local target="$1"
+            local library
+            while IFS= read -r library; do
+              case "$library" in
+                libwhisper.so.*|libggml*.so.*)
+                  local destination="resources/whisper.cpp/linux/$library"
+                  if [ ! -e "$destination" ]; then
+                    local source
+                    # A SONAME is commonly a symlink in the build tree; let
+                    # find return either that symlink or its concrete target.
+                    source="$(find third_party/whisper.cpp/build -name "$library" -print -quit)"
+                    test -n "$source"
+                    cp -L "$source" "$destination"
+                    copy_whisper_dependency "$destination"
+                  fi
+                  ;;
+              esac
+            done < <(readelf -d "$target" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p')
+          }
+          copy_whisper_dependency resources/whisper.cpp/linux/whisper-cli
+          chmod +x resources/whisper.cpp/linux/whisper-cli
+          {
+            printf '{\n'
+            first=true
+            for file in resources/whisper.cpp/linux/*; do
+              $first || printf ',\n'
+              first=false
+              printf '  "linux/%s": "%s"' "$(basename "$file")" "$(sha256sum "$file" | awk '{print $1}')"
+            done
+            printf '\n}\n'
+          } > resources/whisper.cpp/checksums.json
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: npm version "$(node -p "require('./package.json').version")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
@@ -81,6 +111,16 @@ jobs:
           test -f release/*.rpm
           test "$(dpkg-deb -f release/*.deb Package)" = "research-notebook"
           rpm -qip release/*.rpm | grep -q '^Name *: research-notebook$'
+      - name: Smoke test the Whisper sidecar in the Debian package
+        run: |
+          package="$(find release -maxdepth 1 -name '*.deb' -print -quit)"
+          test -n "$package"
+          staging="$(mktemp -d)"
+          trap 'rm -rf "$staging"' EXIT
+          dpkg-deb -x "$package" "$staging"
+          sidecar="$(find "$staging" -path '*/resources/whisper.cpp/linux/whisper-cli' -print -quit)"
+          test -n "$sidecar"
+          LD_LIBRARY_PATH="$(dirname "$sidecar")" "$sidecar" --help
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
@@ -123,7 +163,17 @@ jobs:
           $binary = Get-ChildItem third_party/whisper.cpp/build -Recurse -Filter whisper-cli.exe | Select-Object -First 1
           if (-not $binary) { throw 'whisper-cli.exe was not built.' }
           Copy-Item $binary.FullName resources/whisper.cpp/win32/whisper-cli.exe
-          @{ 'win32/whisper-cli.exe' = (Get-FileHash resources/whisper.cpp/win32/whisper-cli.exe -Algorithm SHA256).Hash.ToLower() } | ConvertTo-Json | Set-Content resources/whisper.cpp/checksums.json
+          # Include the whisper.cpp DLLs built alongside the CLI. The executable
+          # alone cannot load on a clean Windows machine when shared libraries
+          # are enabled by CMake.
+          Get-ChildItem third_party/whisper.cpp/build -Recurse -File |
+            Where-Object { $_.Name -match '^(whisper|ggml).*\.dll$' } |
+            ForEach-Object { Copy-Item $_.FullName resources/whisper.cpp/win32/$_.Name }
+          $hashes = [ordered]@{}
+          Get-ChildItem resources/whisper.cpp/win32 -File | ForEach-Object {
+            $hashes["win32/$($_.Name)"] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+          }
+          $hashes | ConvertTo-Json | Set-Content resources/whisper.cpp/checksums.json
       - name: Set rolling nightly package version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
