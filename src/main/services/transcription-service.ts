@@ -65,9 +65,7 @@ export function redactWhisperDiagnostic(diagnostic: string): string {
 
 export function formatWhisperFailure(diagnostic: string, code: number | null, signal: NodeJS.Signals | null): string {
   const cleaned = redactWhisperDiagnostic(diagnostic)
-  const exit = signal
-    ? `Whisper was terminated by ${signal}.`
-    : `Whisper exited with code ${code ?? 'unknown'}.`
+  const exit = signal ? `Whisper was terminated by ${signal}.` : `Whisper exited with code ${code ?? 'unknown'}.`
   const detail = [cleaned, exit].filter(Boolean).join('\n')
   // Limit the persisted UI error, but preserve the terminal lines where
   // whisper.cpp reports the actual loader/model failure.
@@ -316,11 +314,7 @@ export class WhisperCppProvider implements TranscriptionProvider {
       rmSync(output.replace(/\.txt$/, '.json'), { force: true })
       if (input.cancelled?.()) throw new Error('Cancelled')
       const detail =
-        error instanceof Error
-          ? redactWhisperDiagnostic(error.message)
-              .replace(/\n/g, ' ')
-              .slice(-700)
-          : ''
+        error instanceof Error ? redactWhisperDiagnostic(error.message).replace(/\n/g, ' ').slice(-700) : ''
       throw new Error(
         detail
           ? `Local Whisper could not transcribe this recording: ${detail}`
