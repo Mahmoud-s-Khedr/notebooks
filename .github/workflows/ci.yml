@@ -168,7 +168,10 @@ jobs:
           # are enabled by CMake.
           Get-ChildItem third_party/whisper.cpp/build -Recurse -File |
             Where-Object { $_.Name -match '^(whisper|ggml).*\.dll$' } |
-            ForEach-Object { Copy-Item $_.FullName resources/whisper.cpp/win32/$_.Name }
+            ForEach-Object {
+              $destination = Join-Path 'resources/whisper.cpp/win32' $_.Name
+              Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+            }
           $hashes = [ordered]@{}
           Get-ChildItem resources/whisper.cpp/win32 -File | ForEach-Object {
             $hashes["win32/$($_.Name)"] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
