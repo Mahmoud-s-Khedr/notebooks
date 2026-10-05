@@ -61,7 +61,13 @@ jobs:
         run: |
           git clone --depth 1 --branch v1.8.3 https://github.com/ggml-org/whisper.cpp.git third_party/whisper.cpp
           test "$(git -C third_party/whisper.cpp rev-parse HEAD)" = "2eeeba56e9edd762b4b38467bab96c2517163158"
-          cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build -DWHISPER_BUILD_EXAMPLES=ON
+          # GitHub runners are newer than many target machines. Do not emit a
+          # runner-specific -march=native sidecar: it can die with SIGILL while
+          # loading a model on an otherwise supported CPU.
+          cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DGGML_NATIVE=OFF -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF \
+            -DGGML_BMI2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF
           cmake --build third_party/whisper.cpp/build --target whisper-cli --parallel 2
           mkdir -p resources/whisper.cpp/linux
           cp third_party/whisper.cpp/build/bin/whisper-cli resources/whisper.cpp/linux/whisper-cli
@@ -157,7 +163,12 @@ jobs:
         run: |
           git clone --depth 1 --branch v1.8.3 https://github.com/ggml-org/whisper.cpp.git third_party/whisper.cpp
           if ((git -C third_party/whisper.cpp rev-parse HEAD) -ne '2eeeba56e9edd762b4b38467bab96c2517163158') { throw 'Unexpected whisper.cpp source revision.' }
-          cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build -DWHISPER_BUILD_EXAMPLES=ON
+          # Keep the release sidecar compatible with x64 CPUs that do not
+          # support the instruction set available on the Windows CI runner.
+          cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build `
+            -DWHISPER_BUILD_EXAMPLES=ON `
+            -DGGML_NATIVE=OFF -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF `
+            -DGGML_BMI2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF
           cmake --build third_party/whisper.cpp/build --config Release --target whisper-cli --parallel 2
           New-Item -ItemType Directory -Force -Path resources/whisper.cpp/win32 | Out-Null
           $binary = Get-ChildItem third_party/whisper.cpp/build -Recurse -Filter whisper-cli.exe | Select-Object -First 1

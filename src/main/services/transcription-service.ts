@@ -49,6 +49,31 @@ export function localWhisperEnvironment(
   return { ...environment, LD_LIBRARY_PATH: libraryPath }
 }
 
+/**
+ * The sidecar writes its useful failure reason last (after its configuration
+ * banner). Keep that end of the diagnostic so a model-load error or crash is
+ * not hidden behind routine "use gpu" output. Redaction happens before the
+ * length limit, so neither paths nor credentials can leak into job history.
+ */
+export function redactWhisperDiagnostic(diagnostic: string): string {
+  return diagnostic
+    .replace(/(?:sk-[A-Za-z0-9_-]+|Bearer\s+\S+|(?:api[_-]?key|token|authorization)\s*[=:]\s*\S+)/gi, '[redacted]')
+    .replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]')
+    .replace(/\r/g, '')
+    .trim()
+}
+
+export function formatWhisperFailure(diagnostic: string, code: number | null, signal: NodeJS.Signals | null): string {
+  const cleaned = redactWhisperDiagnostic(diagnostic)
+  const exit = signal
+    ? `Whisper was terminated by ${signal}.`
+    : `Whisper exited with code ${code ?? 'unknown'}.`
+  const detail = [cleaned, exit].filter(Boolean).join('\n')
+  // Limit the persisted UI error, but preserve the terminal lines where
+  // whisper.cpp reports the actual loader/model failure.
+  return detail.length > 700 ? `…${detail.slice(-699)}` : detail
+}
+
 /** Downloads are deliberately owned by main process; no renderer path or URL access is exposed. */
 export class WhisperModelManager {
   // These are the multilingual ggml release artifacts. The revision is pinned so a
@@ -279,11 +304,11 @@ export class WhisperCppProvider implements TranscriptionProvider {
           clearInterval(timer)
           rejectRun(error)
         })
-        child.once('close', (code) => {
+        child.once('close', (code, signal) => {
           clearInterval(timer)
           if (input.cancelled?.()) rejectRun(new Error('Cancelled'))
           else if (code === 0) resolveRun()
-          else rejectRun(new Error(stderr.trim() || `Whisper exited with code ${code ?? 'unknown'}.`))
+          else rejectRun(new Error(formatWhisperFailure(stderr, code, signal)))
         })
       })
     } catch (error) {
@@ -292,14 +317,9 @@ export class WhisperCppProvider implements TranscriptionProvider {
       if (input.cancelled?.()) throw new Error('Cancelled')
       const detail =
         error instanceof Error
-          ? error.message
-              .replace(/[\r\n]+/g, ' ')
-              .replace(
-                /(?:sk-[A-Za-z0-9_-]+|Bearer\s+\S+|(?:api[_-]?key|token|authorization)\s*[=:]\s*\S+)/gi,
-                '[redacted]'
-              )
-              .replace(/(?:[A-Za-z]:)?[/\\][^\s]+/g, '[path redacted]')
-              .slice(0, 350)
+          ? redactWhisperDiagnostic(error.message)
+              .replace(/\n/g, ' ')
+              .slice(-700)
           : ''
       throw new Error(
         detail

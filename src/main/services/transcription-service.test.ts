@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import { TestLibrary, validWav } from '../test-support'
-import { localWhisperEnvironment, TranscriptionService, type TranscriptionProvider } from './transcription-service'
+import {
+  formatWhisperFailure,
+  localWhisperEnvironment,
+  redactWhisperDiagnostic,
+  TranscriptionService,
+  type TranscriptionProvider
+} from './transcription-service'
 import { JobService } from './job-service'
 
 describe('TranscriptionService disk state recovery', () => {
@@ -42,6 +48,22 @@ describe('TranscriptionService disk state recovery', () => {
     expect(localWhisperEnvironment('C:\\Research\\whisper-cli.exe', { Path: 'existing' }, 'win32')).toEqual({
       Path: 'existing'
     })
+  })
+
+  it('keeps the terminal Whisper diagnostic and reports a sidecar signal without leaking secrets', () => {
+    const diagnostic = [
+      'whisper_init_with_params_no_state: use gpu = 1',
+      'loading model at /private/audio/ggml-small.bin token=do-not-save',
+      'ggml backend crashed'
+    ].join('\n')
+    const failure = formatWhisperFailure(diagnostic, null, 'SIGILL')
+    expect(failure).toContain('ggml backend crashed')
+    expect(failure).toContain('Whisper was terminated by SIGILL.')
+    expect(failure).not.toContain('/private')
+    expect(failure).not.toContain('do-not-save')
+    expect(redactWhisperDiagnostic('spawn /private/audio.wav Bearer secret-value')).toBe(
+      'spawn [path redacted] [redacted]'
+    )
   })
 
   it('persists completed, failed, cancelled, and retried runs without secrets or audio paths', async () => {
