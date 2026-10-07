@@ -12,6 +12,18 @@ describe('library path restrictions', () => {
     expect(directoryContains('C:\\Data\\Library', 'C:\\Data\\Library-copy', win32)).toBe(false)
     expect(directoryContains('C:\\Data\\Library', 'D:\\Data\\Library', win32)).toBe(false)
   })
+  it('accepts resolved archive assets and rejects escapes on both platforms', () => {
+    for (const [paths, root] of [
+      [posix, '/archive'],
+      [win32, 'C:\\archive']
+    ] as const) {
+      expect(directoryContains(root, paths.resolve(root, 'assets/image.png'), paths)).toBe(true)
+      expect(directoryContains(root, paths.resolve(root, 'assets/nested/file.wav'), paths)).toBe(true)
+      expect(directoryContains(root, paths.resolve(root, '../archive-copy/file.png'), paths)).toBe(false)
+      expect(directoryContains(root, paths.resolve(root, '../outside.png'), paths)).toBe(false)
+    }
+    expect(directoryContains('C:\\archive', 'D:\\archive\\assets\\image.png', win32)).toBe(false)
+  })
   it('recognizes a chooser alias even before its destination subfolder exists', () => {
     const root = mkdtempSync(join(tmpdir(), 'notebook-path-'))
     try {
