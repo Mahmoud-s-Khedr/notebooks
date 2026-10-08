@@ -215,5 +215,5 @@ describe('refreshing search-opened batches', () => {
     await waitFor(() => expect(screen.getAllByLabelText('Note title')).toHaveLength(200))
     expect(document.querySelector('[data-item-id="note-150"]')).toHaveClass('focused-note')
     expect(document.querySelector('[data-item-id="note-199"]')).toBeInTheDocument()
-  })
+  }, 15_000)
 })

@@ -286,3 +286,57 @@ describe('source navigation consumption', () => {
     expect(screen.getByLabelText('Printed page')).toHaveValue(null)
   })
 })
+
+describe('source failures and retained selections', () => {
+  it.each(['list', 'asset'] as const)('reports a source %s loading failure', async (boundary) => {
+    const api = installResearchNotebookApi()
+    const props = callbacks()
+    const failure = new Error('Source unavailable')
+    if (boundary === 'list') api.sources.list.mockRejectedValueOnce(failure)
+    else {
+      api.sources.list.mockResolvedValue([source()])
+      api.assets.dataUrl.mockRejectedValueOnce(failure)
+    }
+    render(<SourceWorkspace notebookId="notebook-1" workspace={workspace()} activeNoteId={null} {...props} />)
+    await waitFor(() => expect(props.onError).toHaveBeenCalledWith(failure))
+    expect(api.sources.captureText).not.toHaveBeenCalled()
+  })
+  it('retains selected text after capture and Q&A failures so the reader can retry', async () => {
+    const api = installResearchNotebookApi()
+    const props = callbacks()
+    api.sources.list.mockResolvedValue([source()])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    render(
+      <SourceWorkspace
+        notebookId="notebook-1"
+        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
+        activeNoteId="note-1"
+        {...props}
+      />
+    )
+    await screen.findByText('of 2')
+    const selected = screen.getByRole('textbox', { name: 'Selected PDF text' })
+    fireEvent.change(selected, { target: { value: 'Selected evidence' } })
+    api.sources.captureText.mockRejectedValueOnce(new Error('Capture failed'))
+    await userEvent.click(screen.getByRole('button', { name: 'Capture text' }))
+    await waitFor(() =>
+      expect(props.onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Capture failed' }))
+    )
+    expect(selected).toHaveValue('Selected evidence')
+    expect(props.onSaved).not.toHaveBeenCalled()
+    api.sources.createQaNote.mockRejectedValueOnce(new Error('Q&A failed'))
+    await userEvent.click(screen.getByRole('button', { name: 'Create Q&A' }))
+    await waitFor(() => expect(props.onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Q&A failed' })))
+    expect(selected).toHaveValue('Selected evidence')
+    await userEvent.click(screen.getByRole('button', { name: 'Capture text' }))
+    await waitFor(() => expect(selected).toHaveValue(''))
+    expect(props.onSaved).toHaveBeenCalledOnce()
+    expect(api.sources.captureText).toHaveBeenLastCalledWith({
+      noteId: 'note-1',
+      sourceDocumentId: 'source-1',
+      pdfPage: 1,
+      printedPage: undefined,
+      text: 'Selected evidence'
+    })
+  })
+})

@@ -97,3 +97,23 @@ it('keeps a pending recording save shared and rejects a new recording until it c
   await Promise.all([first, simultaneous])
   expect(api.assets.saveRecording).toHaveBeenCalledTimes(1)
 })
+
+it('stops microphone tracks when an active recorder is unmounted', async () => {
+  const api = installResearchNotebookApi()
+  const saves = new SaveCoordinator()
+  const stop = vi.fn()
+  vi.stubGlobal('AudioContext', FakeAudioContext)
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop }], getAudioTracks: () => [] }) }
+  })
+  const view = render(
+    <SaveContext.Provider value={saves}>
+      <AudioRecorder noteId="first" onSaved={vi.fn()} onError={vi.fn()} />
+    </SaveContext.Provider>
+  )
+  await saves.recorder!.start('first')
+  view.unmount()
+  expect(stop).toHaveBeenCalledOnce()
+  expect(api.assets.saveRecording).not.toHaveBeenCalled()
+})
