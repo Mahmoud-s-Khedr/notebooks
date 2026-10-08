@@ -607,19 +607,7 @@ export class NotebookService {
       const blocks = this.db
         .prepare('SELECT * FROM blocks WHERE note_id = ? AND deleted_at IS NULL ORDER BY position')
         .all(noteId) as BlockRow[]
-      const insert = this.db.prepare(
-        'INSERT INTO blocks (id, note_id, type, position, data_json, metadata_json, created_at, updated_at) VALUES (@id, @note_id, @type, @position, @data_json, @metadata_json, @created_at, @updated_at)'
-      )
-      blocks.forEach((block, position) =>
-        insert.run({
-          ...block,
-          id: randomUUID(),
-          note_id: copy.id,
-          position,
-          created_at: createdAt,
-          updated_at: createdAt
-        })
-      )
+      this.duplicateBlockGraph(blocks, copy.id, 0, createdAt)
       this.touchNoteNotebook(copy.id, createdAt)
       this.refreshSearchIndex()
       return asNote(copy)
@@ -690,24 +678,90 @@ export class NotebookService {
     return this.db.transaction(() => {
       const original = this.activeRow('block', blockId) as BlockRow
       const createdAt = now()
-      const copy: BlockRow = {
-        ...original,
-        id: randomUUID(),
-        position: this.nextPosition('blocks', 'note_id', original.note_id),
-        created_at: createdAt,
-        updated_at: createdAt,
-        deleted_at: null,
-        deletion_operation_id: null
-      }
-      this.db
-        .prepare(
-          'INSERT INTO blocks (id, note_id, type, position, data_json, metadata_json, created_at, updated_at) VALUES (@id, @note_id, @type, @position, @data_json, @metadata_json, @created_at, @updated_at)'
-        )
-        .run(copy)
+      const [copy] = this.duplicateBlockGraph(
+        [original],
+        original.note_id,
+        this.nextPosition('blocks', 'note_id', original.note_id),
+        createdAt
+      )
       this.touchNoteNotebook(copy.note_id, createdAt)
       this.refreshSearchIndex()
       return asBlock(copy)
     })()
+  }
+
+  /** Called inside the owning duplication transaction; files and source documents stay shared. */
+  private duplicateBlockGraph(originals: BlockRow[], noteId: string, position: number, createdAt: string): BlockRow[] {
+    const blockIds = new Map(originals.map((block) => [block.id, randomUUID()]))
+    const insert = (table: string, row: Record<string, unknown>) => {
+      const columns = Object.keys(row)
+      this.db
+        .prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`)
+        .run(...Object.values(row))
+    }
+    const copies = originals.map((block, index): BlockRow => ({
+      ...block,
+      id: blockIds.get(block.id)!,
+      note_id: noteId,
+      position: position + index,
+      created_at: createdAt,
+      updated_at: createdAt,
+      deleted_at: null,
+      deletion_operation_id: null
+    }))
+    copies.forEach((copy) => insert('blocks', copy))
+    originals.forEach((original, index) => {
+      const copy = copies[index]
+      const rows = (table: string, key: string, id: string) =>
+        this.db.prepare(`SELECT * FROM ${table} WHERE ${key} = ?`).all(id) as Array<Record<string, unknown>>
+      rows('asset_references', 'block_id', original.id).forEach((row) =>
+        insert('asset_references', { ...row, block_id: copy.id, created_at: createdAt })
+      )
+      rows('block_sources', 'block_id', original.id).forEach((row) =>
+        insert('block_sources', { ...row, id: randomUUID(), block_id: copy.id, created_at: createdAt })
+      )
+      const runIds = new Map<string, string>()
+      rows('transcription_runs', 'block_id', original.id).forEach((row) => {
+        const id = randomUUID()
+        runIds.set(String(row.id), id)
+        const pending = row.status === 'queued' || row.status === 'running'
+        insert('transcription_runs', {
+          ...row,
+          id,
+          block_id: copy.id,
+          created_at: createdAt,
+          updated_at: createdAt,
+          ...(pending
+            ? {
+                status: 'failed',
+                error_message: 'Transcription was pending when duplicated; retry to transcribe this copy.',
+                completed_at: createdAt
+              }
+            : {})
+        })
+        rows('transcription_segments', 'run_id', String(row.id)).forEach((segment) =>
+          insert('transcription_segments', { ...segment, id: randomUUID(), run_id: id })
+        )
+      })
+      const data = JSON.parse(copy.data_json) as Record<string, unknown>
+      if (typeof data.activeTranscriptionRunId === 'string') {
+        data.activeTranscriptionRunId = runIds.get(data.activeTranscriptionRunId) ?? null
+        copy.data_json = JSON.stringify(data)
+        this.db.prepare('UPDATE blocks SET data_json = ? WHERE id = ?').run(copy.data_json, copy.id)
+      }
+      rows('block_relations', 'from_block_id', original.id).forEach((row) => {
+        const target = blockIds.get(String(row.to_block_id))
+        if (target)
+          insert('block_relations', {
+            ...row,
+            id: randomUUID(),
+            from_block_id: copy.id,
+            to_block_id: target,
+            created_at: createdAt
+          })
+      })
+    })
+    return copies
   }
 
   reorderBlocks(noteId: string, blockIds: string[]): void {
@@ -715,8 +769,8 @@ export class NotebookService {
     this.db.transaction(() => {
       this.requireActive('note', noteId)
       const existing = this.db
-        .prepare('SELECT id FROM blocks WHERE note_id = ? AND deleted_at IS NULL ORDER BY position')
-        .all(noteId) as Array<{ id: string }>
+        .prepare('SELECT id, position FROM blocks WHERE note_id = ? AND deleted_at IS NULL ORDER BY position')
+        .all(noteId) as Array<{ id: string; position: number }>
       if (
         existing.length !== blockIds.length ||
         new Set(blockIds).size !== blockIds.length ||
@@ -725,8 +779,10 @@ export class NotebookService {
         throw new Error('Unable to reorder blocks because the submitted order does not match this note.')
       const setPosition = this.db.prepare('UPDATE blocks SET position = ?, updated_at = ? WHERE id = ?')
       const updatedAt = now()
-      existing.forEach(({ id }, index) => setPosition.run(-1000000 - index, updatedAt, id))
-      blockIds.forEach((id, index) => setPosition.run(index, updatedAt, id))
+      // Keep Trash positions reserved so restoration never collides or disturbs the active order.
+      const temporaryStart = this.nextPosition('blocks', 'note_id', noteId)
+      existing.forEach(({ id }, index) => setPosition.run(temporaryStart + index, updatedAt, id))
+      blockIds.forEach((id, index) => setPosition.run(existing[index].position, updatedAt, id))
       this.touchNoteNotebook(noteId, updatedAt)
     })()
   }
@@ -1224,7 +1280,7 @@ export class NotebookService {
         )
           throw new Error('The archive contains an unsafe asset path.')
         const source = resolve(root, asset.exportPath)
-        if (!source.startsWith(`${root}/`) || !existsSync(source)) throw new Error('An archive asset is missing.')
+        if (!directoryContains(root, source) || !existsSync(source)) throw new Error('An archive asset is missing.')
         const expected = typeof asset.sha256 === 'string' ? asset.sha256 : null
         const bytes = readFileSync(source)
         if (!expected || createHash('sha256').update(bytes).digest('hex') !== expected)

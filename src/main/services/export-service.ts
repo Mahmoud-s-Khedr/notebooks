@@ -112,6 +112,19 @@ export class ExportService {
   ) {}
   start(scope: ExportScope, format: ExportFormat, destination: string, renderedPdf?: Buffer): ExportResult {
     const data = this.readScope(scope)
+    // An archive contains only the selected active rows, whose live positions may have gaps.
+    for (const [records, parent] of [
+      [data.pages, 'notebook_id'],
+      [data.notes, 'page_id'],
+      [data.blocks, 'note_id']
+    ] as const) {
+      const next = new Map<string, number>()
+      for (const row of records) {
+        const key = String(row[parent])
+        row.position = next.get(key) ?? 0
+        next.set(key, Number(row.position) + 1)
+      }
+    }
     const id = randomUUID()
     const rootName = `${safe(String(data.notebook.title))}-${stamp()}`
     const staging = join(destination, `.${rootName}-${id}.tmp`)
