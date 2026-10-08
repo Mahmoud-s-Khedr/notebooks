@@ -234,13 +234,16 @@ describe('SourceWorkspace core source-capture workflow', () => {
     fireEvent.pointerUp(stage, { clientX: x2, clientY: y2, pointerId: 1 })
     fireEvent.pointerMove(stage, { clientX: 99, clientY: 99, pointerId: 1 })
     expect(api.sources.captureRegion).not.toHaveBeenCalled()
-    await user.type(screen.getByLabelText('Printed page'), '7')
+    expect(screen.queryByLabelText('Printed page')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Capture text' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Q&A' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Extract region text' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Capture region' }))
     expect(api.sources.captureRegion).toHaveBeenCalledWith({
       noteId: 'note-1',
       sourceDocumentId: 'source-1',
       pdfPage: 1,
-      printedPage: 7,
+      printedPage: undefined,
       bounds: { x: 10, y: 40, width: 50, height: 40, coordinateSpace: 'pdf-points-bottom-left' },
       imageDataUrl: 'data:image/png;base64,renderer-test-capture'
     })

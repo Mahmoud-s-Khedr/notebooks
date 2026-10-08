@@ -1121,17 +1121,19 @@ export class NotebookService {
     return this.db.transaction(() => {
       const targets =
         kind === 'jobs'
-          ? [['jobs', "status IN ('completed','failed','cancelled') AND completed_at < ?"]]
+          ? [['jobs', "status IN ('completed','failed','cancelled') AND (? = 0 OR completed_at < ?)"]]
           : [
-              ['error_events', 'created_at < ?'],
-              ['diagnostic_events', 'created_at < ?']
+              ['error_events', '(? = 0 OR created_at < ?)'],
+              ['diagnostic_events', '(? = 0 OR created_at < ?)']
             ]
       let count = 0
       for (const [table, where] of targets) {
         count += (
-          this.db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`).get(before) as { count: number }
+          this.db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`).get(days, before) as {
+            count: number
+          }
         ).count
-        if (apply) this.db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(before)
+        if (apply) this.db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(days, before)
       }
       return count
     })()

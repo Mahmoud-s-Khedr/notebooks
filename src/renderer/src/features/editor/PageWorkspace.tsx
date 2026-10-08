@@ -8,7 +8,20 @@ import React, {
   type ReactElement
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Copy, FileText, GripVertical, Link2, MoreHorizontal, Plus, Trash2, Type, Volume2, X } from 'lucide-react'
+import {
+  ChevronDown,
+  Copy,
+  FileText,
+  GripVertical,
+  Link2,
+  MoreHorizontal,
+  Plus,
+  Settings2,
+  Trash2,
+  Type,
+  Volume2,
+  X
+} from 'lucide-react'
 import {
   textBlockTypes,
   type Block,
@@ -327,7 +340,6 @@ function NoteEditor({
           Move note to trash
         </Button>
       </div>
-      <div className="note-recording-slot" data-recording-note={note.id} />
       {note.blocks.map((block, index) => (
         <BlockEditor
           key={block.id}
@@ -356,18 +368,21 @@ function NoteEditor({
         <Button variant="ghost" onClick={() => void createBlock()}>
           <Plus size={16} /> Add block
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            void saves
-              .flushEditors()
-              .then(() => saves.recorder?.start(note.id))
-              .catch(onError)
-          }
-        >
-          Record audio
-        </Button>
+        <div className="note-recording-action">
+          <div className="note-recording-slot" data-recording-note={note.id} />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              void saves
+                .flushEditors()
+                .then(() => saves.recorder?.start(note.id))
+                .catch(onError)
+            }
+          >
+            Record audio
+          </Button>
+        </div>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <Button variant="ghost" size="sm">
@@ -902,8 +917,11 @@ function AssetBlock({ block, onError }: { block: Block; onError: (error: unknown
         </>
       ) : block.type === 'audio' ? (
         <div className="audio-block">
-          <Volume2 size={18} />
-          {url ? <audio ref={audio} controls preload="none" src={url} /> : <p>Loading recording…</p>}
+          {url ? (
+            <audio ref={audio} aria-label="Audio recording playback" controls preload="metadata" src={url} />
+          ) : (
+            <p>Loading recording…</p>
+          )}
           <TranscriptionPanel
             block={block}
             onError={onError}
@@ -1175,8 +1193,7 @@ export function AudioRecorder({
     host?.closest('article')?.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value ?? 'Recording note'
   const controls = (
     <div className="audio-recorder-control" role="region" aria-label="Recording controls">
-      <strong dir="auto">{destinationTitle}</strong>
-      {isSaving && <span role="status">Saving recording…</span>}
+      {!host && <strong dir="auto">{destinationTitle}</strong>}
       {failed && <span role="alert">Recording retained. Retry saving.</span>}
       <Button
         variant={recording ? 'danger' : 'ghost'}
@@ -1324,44 +1341,55 @@ function TranscriptionPanel({
   }
   return (
     <div className="transcription">
-      <div className="transcription-setup">
-        <p className="transcription-readiness" role="status">
-          {!readiness
-            ? 'Checking transcription prerequisites…'
-            : provider === 'openrouter'
-              ? readiness.openRouterConfigured
-                ? 'Audio is sent to OpenRouter and its transcription provider. External service charges may apply.'
-                : 'Configure an OpenRouter key in Settings.'
-              : !readiness.localBinaryAvailable
-                ? 'Whisper runtime is missing. Install the bundled runtime; downloading a model does not install the runtime.'
-                : !readiness.localModelAvailable
-                  ? 'Download and select a local model in Settings.'
-                  : `Local runtime ready · ${readiness.selectedLocalModel?.displayName ?? 'Installed model'}`}
-        </p>
-        <div className="transcription-controls">
-          <select
-            aria-label="Transcription provider"
-            value={provider}
-            onChange={(event) => setProvider(event.target.value as typeof provider)}
-          >
-            <option value="local">Local Whisper</option>
-            <option value="openrouter">OpenRouter</option>
-          </select>
-          <select aria-label="Language hint" value={language} onChange={(event) => setLanguage(event.target.value)}>
-            <option value="">Detect language automatically</option>
-            {transcriptionLanguages.map(([code, name]) => (
-              <option key={code} value={code}>
-                {name} ({code})
-              </option>
-            ))}
-          </select>
-          <Button variant="secondary" size="sm" disabled={busy || !canRun} onClick={() => void start()}>
-            Transcribe
-          </Button>
+      <details className="transcription-options" open={!runs.some((run) => run.status === 'completed')}>
+        <summary aria-label="Transcription settings" title="Transcription settings">
+          <Settings2 size={17} />
+        </summary>
+        <div className="transcription-setup">
+          <p className="transcription-readiness" role="status">
+            {!readiness
+              ? 'Checking transcription prerequisites…'
+              : provider === 'openrouter'
+                ? readiness.openRouterConfigured
+                  ? 'Audio is sent to OpenRouter and its transcription provider. External service charges may apply.'
+                  : 'Configure an OpenRouter key in Settings.'
+                : !readiness.localBinaryAvailable
+                  ? 'Whisper runtime is missing. Install the bundled runtime; downloading a model does not install the runtime.'
+                  : !readiness.localModelAvailable
+                    ? 'Download and select a local model in Settings.'
+                    : `Local runtime ready · ${readiness.selectedLocalModel?.displayName ?? 'Installed model'}`}
+          </p>
+          <div className="transcription-controls">
+            <label className="transcription-field">
+              Provider
+              <select
+                aria-label="Transcription provider"
+                value={provider}
+                onChange={(event) => setProvider(event.target.value as typeof provider)}
+              >
+                <option value="local">Local Whisper</option>
+                <option value="openrouter">OpenRouter</option>
+              </select>
+            </label>
+            <label className="transcription-field">
+              Language
+              <select aria-label="Language hint" value={language} onChange={(event) => setLanguage(event.target.value)}>
+                <option value="">Detect language automatically</option>
+                {transcriptionLanguages.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name} ({code})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button variant="secondary" size="sm" disabled={busy || !canRun} onClick={() => void start()}>
+              Transcribe
+            </Button>
+          </div>
         </div>
-      </div>
-      {active && (
-        <div className="transcript-status" role="status">
+      </details>
+      {active && active.status !== 'completed' && (
+        <div className="transcript-status" data-status={active.status} role="status">
           {active.provider} · {active.model} · {active.status}
           {progress !== null ? ` · ${progress}%` : ''}
           {active.errorMessage && <p className="danger-text">{active.errorMessage}</p>}
@@ -1403,6 +1431,8 @@ function TranscriptReview({
 }): ReactElement {
   const saves = useSaves()
   const [selected, setSelected] = useState('')
+  const [view, setView] = useState<'review' | 'source'>('review')
+  const [collapsed, setCollapsed] = useState(false)
   const completed = runs.filter((run) => run.status === 'completed')
   useEffect(() => {
     if (!selected && completed[0]) setSelected(completed[0].id)
@@ -1438,58 +1468,98 @@ function TranscriptReview({
   return (
     <section className="transcript-review" aria-label="Transcript review">
       <div className="transcript-review-heading">
-        <strong>Transcript review</strong>
-        <select
-          aria-label="Transcript run"
-          value={run.id}
-          onChange={(event) => {
-            const id = event.target.value
+        <div className="transcript-view-toggle" role="group" aria-label="Transcript view">
+          <button type="button" aria-pressed={view === 'review'} onClick={() => setView('review')}>
+            Transcript
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === 'source'}
+            onClick={() => {
+              void save()
+                .then(() => setView('source'))
+                .catch(onError)
+            }}
+          >
+            {run.segments.length ? 'Segments' : 'Original'}
+          </button>
+        </div>
+        {completed.length > 1 && (
+          <select
+            className="transcript-run-select"
+            aria-label="Transcript run"
+            title={`${run.model} · ${new Date(run.createdAt).toLocaleString()}`}
+            value={run.id}
+            onChange={(event) => {
+              const id = event.target.value
+              void save()
+                .then(() => setSelected(id))
+                .catch(onError)
+            }}
+          >
+            {completed.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.model.replace(/^ggml-/, '').replace(/\.bin$/, '')} ·{' '}
+                {new Date(r.createdAt).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </option>
+            ))}
+          </select>
+        )}
+        <Button
+          className="transcript-collapse"
+          variant="ghost"
+          size="sm"
+          aria-label={collapsed ? 'Expand transcript' : 'Collapse transcript'}
+          title={collapsed ? 'Expand transcript' : 'Collapse transcript'}
+          aria-expanded={!collapsed}
+          aria-controls={`transcript-content-${block.id}`}
+          onClick={() => {
             void save()
-              .then(() => setSelected(id))
+              .then(() => setCollapsed(!collapsed))
               .catch(onError)
           }}
         >
-          {completed.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.model} · {new Date(r.createdAt).toLocaleString()}
-            </option>
-          ))}
-        </select>
+          <ChevronDown size={16} style={{ transform: collapsed ? 'rotate(-90deg)' : undefined }} />
+        </Button>
       </div>
-      <p className="dialog-copy">
-        Reviewed text is displayed and exported by default. Original segments retain their recognition timestamps.
-      </p>
-      <textarea
-        dir="auto"
-        aria-label="Reviewed transcript"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={() => void save().catch(onError)}
-      />
-      <details className="transcript-source">
-        <summary>
-          {run.segments.length ? `Timestamped source segments (${run.segments.length})` : 'Original recognition'}
-        </summary>
-        {run.segments.length ? (
-          <ol className="transcript-segments">
-            {run.segments.map((segment) => (
-              <li key={segment.id}>
-                <button
-                  onClick={() => onSeek(segment.startMs / 1000)}
-                  aria-label={`Play segment at ${segment.startMs / 1000} seconds`}
-                >
-                  {(segment.startMs / 1000).toFixed(1)}s
-                </button>
-                <span dir="auto">{segment.text}</span>
-              </li>
-            ))}
-          </ol>
+      <div id={`transcript-content-${block.id}`} hidden={collapsed}>
+        {view === 'review' ? (
+          <textarea
+            dir="auto"
+            aria-label="Reviewed transcript"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onBlur={() => void save().catch(onError)}
+          />
         ) : (
-          <p dir="auto" className="original-transcript">
-            {run.transcriptText}
-          </p>
+          <div className="transcript-source" aria-label="Original transcript">
+            {run.segments.length ? (
+              <ol className="transcript-segments">
+                {run.segments.map((segment) => (
+                  <li key={segment.id}>
+                    <button
+                      onClick={() => onSeek(segment.startMs / 1000)}
+                      aria-label={`Play segment at ${segment.startMs / 1000} seconds`}
+                    >
+                      {`${Math.floor(segment.startMs / 60000)}:${String(Math.floor((segment.startMs % 60000) / 1000)).padStart(2, '0')}`}
+                    </button>
+                    <span dir="auto">{segment.text}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p dir="auto" className="original-transcript">
+                {run.transcriptText}
+              </p>
+            )}
+          </div>
         )}
-      </details>
+      </div>
     </section>
   )
 }

@@ -43,6 +43,27 @@ const run = (status: string, extra = {}) => ({
 })
 
 describe('attachment and transcription interactions', () => {
+  it('switches between review and source segments without showing both', async () => {
+    api.transcription.list.mockResolvedValue([
+      run('completed', { segments: [{ id: 'segment-1', startMs: 6000, endMs: 9000, text: 'Original words' }] })
+    ])
+    setup()
+    await waitFor(() => expect(screen.getByLabelText('Reviewed transcript')).toHaveValue('Spoken words'))
+    expect(screen.queryByRole('button', { name: 'Play segment at 6 seconds' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Transcript run' })).not.toBeInTheDocument()
+    expect(screen.queryByText('local · tiny · completed')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Segments' }))
+    expect(await screen.findByRole('button', { name: 'Play segment at 6 seconds' })).toHaveTextContent('0:06')
+    expect(screen.queryByLabelText('Reviewed transcript')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Transcript' }))
+    expect(screen.getByLabelText('Reviewed transcript')).toHaveValue('Spoken words')
+    expect(screen.queryByText('Original words')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse transcript' }))
+    await waitFor(() => expect(screen.getByLabelText('Reviewed transcript')).not.toBeVisible())
+    expect(screen.getByRole('button', { name: 'Expand transcript' })).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Expand transcript' }))
+    await waitFor(() => expect(screen.getByLabelText('Reviewed transcript')).toBeVisible())
+  })
   it('shows missing references and loads file and image data with exact asset IDs', async () => {
     api.assets.dataUrl.mockResolvedValue('data:text/plain;base64,aGVsbG8=')
     api.assets.thumbnailDataUrl.mockResolvedValue('data:image/png;base64,cHJldmlldw==')

@@ -391,7 +391,7 @@ export function SourceWorkspace({
           </section>
         )}
       </div>
-      {source && (readerView === 'text' || interaction === 'region') && (
+      {source && readerView === 'text' && interaction === 'text' && (
         <footer className="capture-dock">
           <div className="capture-actions">
             <label className="printed-page">
@@ -709,11 +709,6 @@ function PdfCanvas({
     )
     onCaptureRegion(crop.toDataURL('image/png'), bounds)
   }
-  const extractRegion = () => {
-    const bounds = completedRegion.current ? pdfBounds(completedRegion.current) : undefined
-    const items = textContent?.items.filter((item) => 'str' in item) ?? []
-    onText(reconstructText(items, bounds ?? undefined))
-  }
   return (
     <>
       <div className="pdf-scroll" ref={scroll}>
@@ -788,9 +783,6 @@ function PdfCanvas({
       </div>
       {interaction === 'region' && (
         <div className="extraction-actions">
-          <Button variant="secondary" size="sm" disabled={!region?.width} onClick={extractRegion}>
-            Extract region text
-          </Button>
           <Button size="sm" disabled={!region?.width || !canCapture} onClick={capture}>
             Capture region
           </Button>

@@ -356,7 +356,7 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
     z
       .object({
         kind: z.enum(['jobs', 'diagnostics']),
-        days: z.number().int().min(1).max(36500).optional(),
+        days: z.number().int().min(0).max(36500).optional(),
         apply: z.boolean().optional()
       })
       .strict(),

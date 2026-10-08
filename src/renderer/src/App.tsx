@@ -1086,27 +1086,38 @@ function SettingsPage({
               <HistoryCleanup kind="jobs" onCleaned={load} onError={onError} />
               <HistoryCleanup kind="diagnostics" onCleaned={load} onError={onError} />
               {maintenance && <p className="diagnostic-result">{maintenance}</p>}
-              <div className="dialog-actions">
-                <Button
-                  variant="secondary"
-                  onClick={() => void window.researchNotebook.backups.start().then(load).catch(onError)}
-                >
-                  Back up library
-                </Button>
-                <Button variant="secondary" disabled={!notebookId} onClick={() => void scan()}>
-                  Scan active notebook assets
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    void window.researchNotebook.diagnostics
-                      .export()
-                      .then((path) => setMaintenance(path ? `Exported to ${path}` : 'No diagnostics exported.'))
-                      .catch(onError)
-                  }
-                >
-                  Export diagnostics
-                </Button>
+              <div className="maintenance-tools">
+                <h3>Library tools</h3>
+                <p className="dialog-copy">Create a backup, check attachments, or save a diagnostics report.</p>
+                <div className="dialog-actions">
+                  <Button
+                    variant="secondary"
+                    onClick={() => void window.researchNotebook.backups.start().then(load).catch(onError)}
+                  >
+                    Back up library
+                  </Button>
+                  <Button variant="secondary" disabled={!notebookId} onClick={() => void scan()}>
+                    Scan active notebook assets
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      void window.researchNotebook.diagnostics
+                        .export()
+                        .then((path) => setMaintenance(path ? `Exported to ${path}` : 'No diagnostics exported.'))
+                        .catch(onError)
+                    }
+                  >
+                    Export diagnostics
+                  </Button>
+                </div>
+                {!notebookId && (
+                  <p className="maintenance-hint">Open a notebook in the workspace to scan its assets.</p>
+                )}
+              </div>
+              <div className="maintenance-history-heading">
+                <h3>Background jobs</h3>
+                <span>{jobs.length} records</span>
               </div>
               <div className="jobs-list settings-jobs">
                 {jobs.length ? (
@@ -1145,7 +1156,10 @@ function SettingsPage({
                     </div>
                   ))
                 ) : (
-                  <p className="dialog-copy">No background jobs.</p>
+                  <div className="maintenance-empty">
+                    <strong>No background jobs</strong>
+                    <p>Exports, backups, and transcription tasks will appear here.</p>
+                  </div>
                 )}
               </div>
             </section>
@@ -1204,7 +1218,10 @@ function JobsDialog({
             </div>
           ))
         ) : (
-          <p className="dialog-copy">No background jobs.</p>
+          <div className="maintenance-empty">
+            <strong>No background jobs</strong>
+            <p>Exports, backups, and transcription tasks will appear here.</p>
+          </div>
         )}
       </div>
     </Modal>
@@ -1279,40 +1296,63 @@ function DiagnosticsDialog({
           Export diagnostics
         </Button>
       </div>
-      <div>
-        <select
-          aria-label="Filter errors by process"
-          value={process}
-          onChange={(event) => setProcess(event.target.value as ErrorProcess | '')}
-        >
-          <option value="">All processes</option>
-          {(['renderer', 'preload', 'main', 'service', 'job', 'lifecycle'] as const).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Filter errors by severity"
-          value={severity}
-          onChange={(event) => setSeverity(event.target.value as ErrorSeverity | '')}
-        >
-          <option value="">All severities</option>
-          {(['warning', 'error', 'fatal'] as const).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-        <Input
-          dir="auto"
-          aria-label="Filter errors by category"
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          placeholder="Category"
-        />
+      {!notebookId && <p className="maintenance-hint">Open a notebook in the workspace to scan its assets.</p>}
+      <div className="diagnostics-filters">
+        <label>
+          <span>Process</span>
+          <select
+            aria-label="Filter errors by process"
+            value={process}
+            onChange={(event) => setProcess(event.target.value as ErrorProcess | '')}
+          >
+            <option value="">All processes</option>
+            {(['renderer', 'preload', 'main', 'service', 'job', 'lifecycle'] as const).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Severity</span>
+          <select
+            aria-label="Filter errors by severity"
+            value={severity}
+            onChange={(event) => setSeverity(event.target.value as ErrorSeverity | '')}
+          >
+            <option value="">All severities</option>
+            {(['warning', 'error', 'fatal'] as const).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Category</span>
+          <Input
+            dir="auto"
+            aria-label="Filter errors by category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            placeholder="Filter by category…"
+          />
+        </label>
+        {(process || severity || category) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setProcess('')
+              setSeverity('')
+              setCategory('')
+            }}
+          >
+            Reset filters
+          </Button>
+        )}
       </div>
-      <div>
+      <div className="diagnostics-events">
         {events.length ? (
           events.map((event) => (
             <details key={event.id}>
@@ -1326,7 +1366,14 @@ function DiagnosticsDialog({
             </details>
           ))
         ) : (
-          <p className="dialog-copy">No matching saved errors.</p>
+          <div className="maintenance-empty">
+            <strong>{process || severity || category ? 'No matching saved errors' : 'No saved errors'}</strong>
+            <p>
+              {process || severity || category
+                ? 'Try another filter or reset filters to see all records.'
+                : 'Errors recorded by the app will appear here with debugging details.'}
+            </p>
+          </div>
         )}
       </div>
     </Modal>
@@ -1593,32 +1640,59 @@ function HistoryCleanup({
   }
   return (
     <section className="history-cleanup">
-      <strong>{kind === 'jobs' ? 'Finished job history' : 'Saved errors and job diagnostics'}</strong>
-      <label>
-        Older than{' '}
-        <input
-          dir="auto"
-          aria-label={`${kind} retention days`}
-          type="number"
-          min="1"
-          max="36500"
-          value={days}
-          onChange={(event) => {
-            setDays(Math.max(1, Math.min(36500, Number(event.target.value) || 30)))
-            setCount(null)
-          }}
-        />{' '}
-        days
-      </label>
-      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void preview()}>
-        Preview cleanup
-      </Button>
+      <div className="history-cleanup-heading">
+        <strong>{kind === 'jobs' ? 'Finished job history' : 'Saved errors and job diagnostics'}</strong>
+        <p>
+          {kind === 'jobs'
+            ? 'Clear completed, failed, and cancelled jobs. Active jobs stay in your library.'
+            : 'Remove local debugging records. Your notes, files, and transcripts stay in your library.'}
+        </p>
+      </div>
+      <div className="history-cleanup-controls">
+        <label>
+          <span>Remove</span>
+          <select
+            aria-label={`${kind} cleanup range`}
+            value={days === 0 ? 'all' : 'older'}
+            onChange={(event) => {
+              setDays(event.target.value === 'all' ? 0 : 30)
+              setCount(null)
+              setResult('')
+            }}
+          >
+            <option value="older">History older than…</option>
+            <option value="all">All {kind === 'jobs' ? 'finished history' : 'saved diagnostics'}</option>
+          </select>
+        </label>
+        {days > 0 && (
+          <label>
+            Older than{' '}
+            <input
+              dir="auto"
+              aria-label={`${kind} retention days`}
+              type="number"
+              min="1"
+              max="36500"
+              value={days}
+              onChange={(event) => {
+                setDays(Math.max(1, Math.min(36500, Number(event.target.value) || 30)))
+                setCount(null)
+              }}
+            />{' '}
+            days
+          </label>
+        )}
+        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void preview()}>
+          {busy ? 'Working…' : 'Preview cleanup'}
+        </Button>
+      </div>
       {result && <p role="status">{result}</p>}
       {count !== null && (
         <div role="alert">
           <p>
-            {count} records will be removed. Active jobs, notes, assets, transcripts, and export references are
-            preserved.
+            {count === 0
+              ? 'No records match this range. Try a shorter age or choose all history.'
+              : `${count} records will be permanently removed. Your saved content and active jobs are preserved.`}
           </p>
           <Button variant="danger" size="sm" disabled={busy || count === 0} onClick={() => void apply()}>
             Confirm cleanup

@@ -143,6 +143,9 @@ describe('repair failure boundaries', () => {
     expect(value.service.listJobs()).toHaveLength(3)
     expect(value.service.historyCleanup('jobs', 30, true)).toBe(1)
     expect(value.service.listJobs()).toHaveLength(2)
+    expect(value.service.historyCleanup('jobs', 0)).toBe(1)
+    expect(value.service.historyCleanup('jobs', 0, true)).toBe(1)
+    expect(value.service.listJobs().map((job) => job.status)).toEqual(['running'])
     expect(value.database.connection.prepare('SELECT COUNT(*) AS count FROM blocks').get()).toEqual({ count: 1 })
   })
 
