@@ -61,7 +61,7 @@ describe('attachment and transcription interactions', () => {
     )
     expect(api.assets.thumbnailDataUrl).toHaveBeenCalledWith({ assetId: 'image-id', width: 800, height: 600 })
     api.assets.dataUrl.mockResolvedValue('data:image/png;base64,b3JpZ2luYWw=')
-    await userEvent.click(screen.getByRole('button', { name: 'Load original image' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open full-resolution image: photo.png' }))
     await waitFor(() =>
       expect(screen.getByRole('img', { name: 'photo.png' })).toHaveAttribute(
         'src',
@@ -77,7 +77,7 @@ describe('attachment and transcription interactions', () => {
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Thumbnail unavailable' }))
     )
     api.assets.dataUrl.mockRejectedValueOnce(new Error('Asset missing'))
-    await userEvent.click(screen.getByRole('button', { name: 'Load original image' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Load image' }))
     await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Asset missing' })))
   })
   it.each([

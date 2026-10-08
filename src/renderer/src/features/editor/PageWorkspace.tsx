@@ -871,22 +871,34 @@ function AssetBlock({ block, onError }: { block: Block; onError: (error: unknown
       ) : image ? (
         <>
           {url ? (
-            <img
-              loading="lazy"
-              className="asset-image"
-              src={url}
-              alt={typeof block.data.filename === 'string' ? block.data.filename : 'Attached asset'}
-            />
+            <button
+              type="button"
+              className="asset-preview"
+              aria-label={`Open full-resolution image: ${
+                typeof block.data.filename === 'string' ? block.data.filename : 'attached asset'
+              }`}
+              title="Open full-resolution image"
+              onClick={() => void window.researchNotebook.assets.dataUrl({ assetId }).then(setUrl).catch(onError)}
+            >
+              <img
+                loading="lazy"
+                className="asset-image"
+                src={url}
+                alt={typeof block.data.filename === 'string' ? block.data.filename : 'Attached asset'}
+              />
+            </button>
           ) : (
-            <p>Loading image preview…</p>
+            <div className="asset-loading">
+              <p>Loading image preview…</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void window.researchNotebook.assets.dataUrl({ assetId }).then(setUrl).catch(onError)}
+              >
+                Load image
+              </Button>
+            </div>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void window.researchNotebook.assets.dataUrl({ assetId }).then(setUrl).catch(onError)}
-          >
-            Load original image
-          </Button>
         </>
       ) : block.type === 'audio' ? (
         <div className="audio-block">
@@ -1312,39 +1324,41 @@ function TranscriptionPanel({
   }
   return (
     <div className="transcription">
-      <p role="status">
-        {!readiness
-          ? 'Checking transcription prerequisites…'
-          : provider === 'openrouter'
-            ? readiness.openRouterConfigured
-              ? 'Audio is sent to OpenRouter and its transcription provider. External service charges may apply.'
-              : 'Configure an OpenRouter key in Settings.'
-            : !readiness.localBinaryAvailable
-              ? 'Whisper runtime is missing. Install the bundled runtime; downloading a model does not install the runtime.'
-              : !readiness.localModelAvailable
-                ? 'Download and select a local model in Settings.'
-                : `Local runtime ready · ${readiness.selectedLocalModel?.displayName ?? 'Installed model'}`}
-      </p>
-      <div>
-        <select
-          aria-label="Transcription provider"
-          value={provider}
-          onChange={(event) => setProvider(event.target.value as typeof provider)}
-        >
-          <option value="local">Local Whisper</option>
-          <option value="openrouter">OpenRouter</option>
-        </select>
-        <select aria-label="Language hint" value={language} onChange={(event) => setLanguage(event.target.value)}>
-          <option value="">Detect language automatically</option>
-          {transcriptionLanguages.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name} ({code})
-            </option>
-          ))}
-        </select>
-        <Button variant="secondary" size="sm" disabled={busy || !canRun} onClick={() => void start()}>
-          Transcribe
-        </Button>
+      <div className="transcription-setup">
+        <p className="transcription-readiness" role="status">
+          {!readiness
+            ? 'Checking transcription prerequisites…'
+            : provider === 'openrouter'
+              ? readiness.openRouterConfigured
+                ? 'Audio is sent to OpenRouter and its transcription provider. External service charges may apply.'
+                : 'Configure an OpenRouter key in Settings.'
+              : !readiness.localBinaryAvailable
+                ? 'Whisper runtime is missing. Install the bundled runtime; downloading a model does not install the runtime.'
+                : !readiness.localModelAvailable
+                  ? 'Download and select a local model in Settings.'
+                  : `Local runtime ready · ${readiness.selectedLocalModel?.displayName ?? 'Installed model'}`}
+        </p>
+        <div className="transcription-controls">
+          <select
+            aria-label="Transcription provider"
+            value={provider}
+            onChange={(event) => setProvider(event.target.value as typeof provider)}
+          >
+            <option value="local">Local Whisper</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+          <select aria-label="Language hint" value={language} onChange={(event) => setLanguage(event.target.value)}>
+            <option value="">Detect language automatically</option>
+            {transcriptionLanguages.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name} ({code})
+              </option>
+            ))}
+          </select>
+          <Button variant="secondary" size="sm" disabled={busy || !canRun} onClick={() => void start()}>
+            Transcribe
+          </Button>
+        </div>
       </div>
       {active && (
         <div className="transcript-status" role="status">
@@ -1452,24 +1466,29 @@ function TranscriptReview({
         onChange={(event) => setText(event.target.value)}
         onBlur={() => void save().catch(onError)}
       />
-      <details>
-        <summary>Original recognition and segments</summary>
-        <p dir="auto" className="original-transcript">
-          {run.transcriptText}
-        </p>
-        <ol className="transcript-segments">
-          {run.segments.map((segment) => (
-            <li key={segment.id}>
-              <button
-                onClick={() => onSeek(segment.startMs / 1000)}
-                aria-label={`Play segment at ${segment.startMs / 1000} seconds`}
-              >
-                {(segment.startMs / 1000).toFixed(1)}s
-              </button>
-              <span dir="auto">{segment.text}</span>
-            </li>
-          ))}
-        </ol>
+      <details className="transcript-source">
+        <summary>
+          {run.segments.length ? `Timestamped source segments (${run.segments.length})` : 'Original recognition'}
+        </summary>
+        {run.segments.length ? (
+          <ol className="transcript-segments">
+            {run.segments.map((segment) => (
+              <li key={segment.id}>
+                <button
+                  onClick={() => onSeek(segment.startMs / 1000)}
+                  aria-label={`Play segment at ${segment.startMs / 1000} seconds`}
+                >
+                  {(segment.startMs / 1000).toFixed(1)}s
+                </button>
+                <span dir="auto">{segment.text}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p dir="auto" className="original-transcript">
+            {run.transcriptText}
+          </p>
+        )}
       </details>
     </section>
   )

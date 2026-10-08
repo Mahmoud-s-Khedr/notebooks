@@ -105,13 +105,10 @@ describe('SourceWorkspace core source-capture workflow', () => {
     )
 
     expect(await screen.findByText('of 2')).toBeVisible()
-    const selectedText = screen.getByRole('textbox', { name: 'Selected PDF text' })
-    expect(selectedText).toHaveValue('')
-    await user.click(screen.getByRole('button', { name: 'Extract page text' }))
+    await user.click(screen.getByRole('button', { name: 'Page text' }))
+    const selectedText = await screen.findByRole('textbox', { name: 'Selected PDF text' })
     await waitFor(() => expect(selectedText).toHaveValue('Fixture PDF text page 1'))
     await user.click(screen.getByRole('button', { name: 'Next page' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Extract page text' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: 'Extract page text' }))
     await waitFor(() => expect(selectedText).toHaveValue('Fixture PDF text page 2'))
     await user.type(screen.getByRole('spinbutton', { name: 'Printed page' }), '12')
     await user.click(screen.getByRole('button', { name: 'Capture text' }))
@@ -126,6 +123,59 @@ describe('SourceWorkspace core source-capture workflow', () => {
       })
     )
     expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('offers contextual actions for selected PDF text and captures the selected quote', async () => {
+    const user = userEvent.setup()
+    const document = source()
+    api.sources.list.mockResolvedValue([document])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    render(
+      <SourceWorkspace
+        notebookId="notebook-1"
+        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
+        activeNoteId="note-1"
+        {...callbacks()}
+      />
+    )
+
+    const stage = await screen.findByLabelText('PDF page. Drag to capture an image region.')
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      anchorNode: stage,
+      rangeCount: 1,
+      toString: () => 'A selected quote',
+      getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 10, bottom: 20, width: 40 }) })
+    } as unknown as Selection)
+    fireEvent.pointerUp(stage, { clientX: 30, clientY: 20, pointerId: 1 })
+
+    expect(await screen.findByRole('toolbar', { name: 'Selected text actions' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Capture quote' }))
+    await waitFor(() =>
+      expect(api.sources.captureText).toHaveBeenCalledWith({
+        noteId: 'note-1',
+        sourceDocumentId: 'source-1',
+        pdfPage: 1,
+        printedPage: undefined,
+        text: 'A selected quote'
+      })
+    )
+  })
+
+  it('opens selected text actions with the context menu', async () => {
+    api.sources.list.mockResolvedValue([source()])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    render(<SourceWorkspace notebookId="notebook-1" workspace={workspace()} activeNoteId="note-1" {...callbacks()} />)
+
+    const stage = await screen.findByLabelText('PDF page. Drag to capture an image region.')
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      anchorNode: stage,
+      rangeCount: 1,
+      toString: () => 'Context selection',
+      getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 10, bottom: 20, width: 40 }) })
+    } as unknown as Selection)
+    fireEvent.contextMenu(stage, { clientX: 30, clientY: 20 })
+
+    expect(await screen.findByRole('toolbar', { name: 'Selected text actions' })).toBeVisible()
   })
 
   it.each([
@@ -146,7 +196,6 @@ describe('SourceWorkspace core source-capture workflow', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Region' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Extract page text' })).toBeEnabled())
     const stage = screen.getByLabelText('PDF page. Drag to capture an image region.')
     fireEvent.pointerDown(stage, { clientX: x1, clientY: y1, pointerId: 1, button: 0 })
     fireEvent.pointerMove(stage, { clientX: x2, clientY: y2, pointerId: 1 })
@@ -215,9 +264,8 @@ describe('PDF interaction regression', () => {
         {...callbacks()}
       />
     )
+    await user.click(screen.getByRole('button', { name: 'Page text' }))
     const text = await screen.findByRole('textbox', { name: 'Selected PDF text' })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Extract page text' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: 'Extract page text' }))
     await waitFor(() => expect(text).toHaveValue('Fixture PDF text page 1'))
     await user.clear(text)
     await user.type(text, 'Edited evidence')
@@ -244,6 +292,7 @@ describe('PDF interaction regression', () => {
         {...callbacks()}
       />
     )
+    await userEvent.click(screen.getByRole('button', { name: 'Page text' }))
     expect(await screen.findByRole('button', { name: 'Capture text' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Attach media' })).not.toBeInTheDocument()
     expect(screen.getByText('Capture to: Select a note to capture')).toBeVisible()
@@ -277,7 +326,9 @@ describe('source navigation consumption', () => {
         {...callbacks()}
       />
     )
+    await user.click(screen.getByRole('button', { name: 'Page text' }))
     await waitFor(() => expect(screen.getByLabelText('Printed page')).toHaveValue(17))
+    await waitFor(() => expect(screen.getByLabelText('Selected PDF text')).toHaveValue('Recorded evidence'))
     api.sources.list.mockResolvedValue([first, second])
     await user.click(screen.getByRole('button', { name: 'Import PDF' }))
     await screen.findByRole('option', { name: 'Comparison' })
@@ -315,6 +366,7 @@ describe('source failures and retained selections', () => {
       />
     )
     await screen.findByText('of 2')
+    await userEvent.click(screen.getByRole('button', { name: 'Page text' }))
     const selected = screen.getByRole('textbox', { name: 'Selected PDF text' })
     fireEvent.change(selected, { target: { value: 'Selected evidence' } })
     api.sources.captureText.mockRejectedValueOnce(new Error('Capture failed'))

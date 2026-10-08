@@ -634,11 +634,35 @@ kbd {
 .slash-menu small {
   color: var(--muted);
 }
+.asset-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: min(100%, 760px);
+}
+.asset-preview {
+  display: block;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+  box-shadow: 0 1px 2px #20364b0d;
+  cursor: zoom-in;
+}
+.asset-preview:hover {
+  border-color: #9db7d8;
+  background: #f2f7fd;
+}
+.asset-preview:focus-visible {
+  outline: 3px solid #8cbbf8;
+  outline-offset: 2px;
+}
 .asset-image {
+  display: block;
   max-width: 100%;
   max-height: 500px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 .audio-block {
   display: flex;

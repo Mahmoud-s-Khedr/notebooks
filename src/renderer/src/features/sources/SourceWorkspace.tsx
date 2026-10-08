@@ -60,6 +60,7 @@ export function SourceWorkspace({
   const [page, setPage] = useState(1)
   const [pageInput, setPageInput] = useState('1')
   const [interaction, setInteraction] = useState<'text' | 'region'>('text')
+  const [readerView, setReaderView] = useState<'page' | 'text'>('page')
   const [pageCount, setPageCount] = useState(0)
   // A null zoom follows the available pane width. Once the reader changes the
   // zoom controls, it becomes an explicit scale and is left alone.
@@ -67,6 +68,7 @@ export function SourceWorkspace({
   const [fitZoom, setFitZoom] = useState(1)
   const [printedPage, setPrintedPage] = useState('')
   const [selection, setSelection] = useState('')
+  const [pageText, setPageText] = useState('')
   const [region, setRegion] = useState<Rectangle | null>(null)
   const noteId = activeNoteId
   const destination = workspace?.notes.find((n) => n.id === noteId)
@@ -126,6 +128,7 @@ export function SourceWorkspace({
   useEffect(() => {
     setPageInput(String(page))
     setSelection('')
+    setPageText('')
     setRegion(null)
     setPrintedPage(
       navigation && navigation.sourceDocumentId === source?.id && navigation.pdfPage === page
@@ -133,6 +136,15 @@ export function SourceWorkspace({
         : ''
     )
   }, [source?.id, page, navigation])
+  useEffect(() => {
+    const hasNavigatedExcerpt = Boolean(
+      navigation &&
+      navigation.sourceDocumentId === source?.id &&
+      navigation.pdfPage === page &&
+      navigation.extractedText
+    )
+    if (readerView === 'text' && pageText && !hasNavigatedExcerpt) setSelection(pageText)
+  }, [navigation, page, pageText, readerView, source?.id])
   const acceptPage = () => {
     const safe = Math.max(1, Math.min(pageCount || 1, Math.trunc(Number(pageInput)) || 1))
     setPage(safe)
@@ -151,8 +163,8 @@ export function SourceWorkspace({
       onError(error)
     }
   }
-  const captureText = async () => {
-    if (!noteId || !source || !selection.trim()) return
+  const captureText = async (text = selection) => {
+    if (!noteId || !source || !text.trim()) return
     const context = captureContext.current
     try {
       await window.researchNotebook.sources.captureText({
@@ -160,7 +172,7 @@ export function SourceWorkspace({
         sourceDocumentId: source.id,
         pdfPage: page,
         printedPage: printedPage ? Number(printedPage) : undefined,
-        text: selection
+        text
       })
       if (captureContext.current === context) setSelection('')
       await onSaved()
@@ -168,8 +180,8 @@ export function SourceWorkspace({
       onError(error)
     }
   }
-  const createQa = async () => {
-    if (!workspace || !source || !selection.trim()) return
+  const createQa = async (text = selection) => {
+    if (!workspace || !source || !text.trim()) return
     const context = captureContext.current
     try {
       const created = await window.researchNotebook.sources.createQaNote({
@@ -177,7 +189,7 @@ export function SourceWorkspace({
         sourceDocumentId: source.id,
         pdfPage: page,
         printedPage: printedPage ? Number(printedPage) : undefined,
-        text: selection
+        text
       })
       if (captureContext.current === context) setSelection('')
       await onSaved(created.id)
@@ -206,18 +218,12 @@ export function SourceWorkspace({
   return (
     <div className="source-workspace">
       <header className="source-header">
-        <div>
+        <div className="source-heading">
           <span className="eyebrow">Source viewer</span>
           <h2 dir="auto">{source?.title ?? 'Read and capture'}</h2>
         </div>
-        <div className="source-header-actions">
-          <Button variant="secondary" size="sm" disabled={!notebookId} onClick={() => void importPdf()}>
-            <Upload size={15} /> Import PDF
-          </Button>
-        </div>
-      </header>
-      <div className="source-toolbar">
         <select
+          className="source-picker"
           aria-label="Source document"
           value={source?.id ?? ''}
           onChange={(event) => {
@@ -233,7 +239,12 @@ export function SourceWorkspace({
             </option>
           ))}
         </select>
-      </div>
+        <div className="source-header-actions">
+          <Button variant="secondary" size="sm" disabled={!notebookId} onClick={() => void importPdf()}>
+            <Upload size={15} /> Import PDF
+          </Button>
+        </div>
+      </header>
       <div className="source-toolbar" aria-label="Capture mode">
         <Button
           size="sm"
@@ -254,6 +265,24 @@ export function SourceWorkspace({
         >
           Region
         </Button>
+        <div className="reader-view-toggle" aria-label="Reader view">
+          <Button
+            size="sm"
+            variant={readerView === 'page' ? 'primary' : 'secondary'}
+            aria-pressed={readerView === 'page'}
+            onClick={() => setReaderView('page')}
+          >
+            PDF page
+          </Button>
+          <Button
+            size="sm"
+            variant={readerView === 'text' ? 'primary' : 'secondary'}
+            aria-pressed={readerView === 'text'}
+            onClick={() => setReaderView('text')}
+          >
+            Page text
+          </Button>
+        </div>
         <div className="page-controls">
           <div className="page-navigation">
             <Button
@@ -311,35 +340,58 @@ export function SourceWorkspace({
             </Button>
           </div>
         </div>
-        <span role="status">Capture to: {destination?.title ?? 'Select a note to capture'}</span>
+        <span className="source-capture-target" role="status" title={destination?.title ?? 'Select a note to capture'}>
+          Capture to: {destination?.title ?? 'Select a note to capture'}
+        </span>
       </div>
-      {url ? (
-        <PdfCanvas
-          key={source?.id}
-          initialText={
-            navigation?.sourceDocumentId === source?.id && navigation?.pdfPage === page
-              ? navigation?.extractedText
-              : null
-          }
-          interaction={interaction}
-          canCapture={Boolean(noteId)}
-          url={url}
-          page={page}
-          zoom={zoom}
-          onFitZoom={setFitZoom}
-          onPageCount={acceptCount}
-          onText={setSelection}
-          onRegion={setRegion}
-          onCaptureRegion={captureRegion}
-          region={region}
-        />
-      ) : (
-        <div className="source-empty">
-          <FileText size={30} />
-          <p>Import a PDF to read it beside your notes.</p>
-        </div>
-      )}
-      {source && (
+      <div className={`source-reader ${readerView === 'text' ? 'page-text-view' : 'pdf-page-view'}`}>
+        {url ? (
+          <PdfCanvas
+            key={source?.id}
+            initialText={
+              navigation?.sourceDocumentId === source?.id && navigation?.pdfPage === page
+                ? navigation?.extractedText
+                : null
+            }
+            interaction={interaction}
+            canCapture={Boolean(noteId)}
+            url={url}
+            page={page}
+            zoom={zoom}
+            onFitZoom={setFitZoom}
+            onPageCount={acceptCount}
+            onPageText={setPageText}
+            onText={setSelection}
+            onCaptureText={(text) => void captureText(text)}
+            onCreateQa={(text) => void createQa(text)}
+            canCreateQa={Boolean(workspace)}
+            onRegion={setRegion}
+            onCaptureRegion={captureRegion}
+            region={region}
+          />
+        ) : (
+          <div className="source-empty">
+            <FileText size={30} />
+            <p>Import a PDF to read it beside your notes.</p>
+          </div>
+        )}
+        {source && readerView === 'text' && (
+          <section className="page-text-reader" aria-label="Page text reader">
+            <div className="page-text-reader-heading">
+              <strong>Page text</strong>
+              <span>{pageText ? 'Editable extracted text' : 'Text is loading from this page…'}</span>
+            </div>
+            <textarea
+              dir="auto"
+              aria-label="Selected PDF text"
+              value={selection}
+              onChange={(event) => setSelection(event.target.value)}
+              placeholder="Extracted page text will appear here…"
+            />
+          </section>
+        )}
+      </div>
+      {source && (readerView === 'text' || interaction === 'region') && (
         <footer className="capture-dock">
           <div className="capture-actions">
             <label className="printed-page">
@@ -364,13 +416,6 @@ export function SourceWorkspace({
               Create Q&A
             </Button>
           </div>
-          <textarea
-            dir="auto"
-            aria-label="Selected PDF text"
-            value={selection}
-            onChange={(event) => setSelection(event.target.value)}
-            placeholder="Select text in the PDF, or edit the extracted text here…"
-          />
         </footer>
       )}
     </div>
@@ -386,7 +431,11 @@ function PdfCanvas({
   zoom,
   onFitZoom,
   onPageCount,
+  onPageText,
   onText,
+  onCaptureText,
+  onCreateQa,
+  canCreateQa,
   onRegion,
   onCaptureRegion,
   region
@@ -399,7 +448,11 @@ function PdfCanvas({
   zoom: number | null
   onFitZoom: (zoom: number) => void
   onPageCount: (count: number) => void
+  onPageText: (text: string) => void
   onText: (text: string) => void
+  onCaptureText: (text: string) => void
+  onCreateQa: (text: string) => void
+  canCreateQa: boolean
   onRegion: (region: Rectangle | null) => void
   onCaptureRegion: (data: string, bounds: Rectangle) => void
   region: Rectangle | null
@@ -418,6 +471,7 @@ function PdfCanvas({
   const [error, setError] = useState<string | null>(null)
   const [pageWidth, setPageWidth] = useState(0)
   const [availableWidth, setAvailableWidth] = useState(0)
+  const [textActions, setTextActions] = useState<{ x: number; y: number; text: string } | null>(null)
   const fitZoom = pageWidth && availableWidth ? Math.max(0.1, availableWidth / pageWidth) : 1
   const effectiveZoom = zoom ?? fitZoom
   useEffect(() => {
@@ -480,6 +534,7 @@ function PdfCanvas({
       .then((content) => {
         if (!active) return
         setTextContent(content)
+        onPageText(reconstructText(content.items.filter((item) => 'str' in item)))
         if (initialText) onText(initialText)
       })
       .catch((reason) => {
@@ -488,7 +543,7 @@ function PdfCanvas({
     return () => {
       active = false
     }
-  }, [doc, page, onText, initialText])
+  }, [doc, page, onText, onPageText, initialText])
   useEffect(() => {
     if (!doc) return
     let active = true
@@ -555,9 +610,7 @@ function PdfCanvas({
   }
   const finish = (event: PointerEvent<HTMLDivElement>) => {
     if (interaction === 'text') {
-      const selected = window.getSelection()
-      if (selected?.anchorNode && wrapper.current?.contains(selected.anchorNode) && selected.toString().trim())
-        onText(selected.toString())
+      showTextActions()
       return
     }
     if (drag.current?.pointer !== event.pointerId) return
@@ -575,8 +628,41 @@ function PdfCanvas({
   useEffect(() => {
     drag.current = null
     completedRegion.current = null
+    setTextActions(null)
     onRegion(null)
   }, [page, interaction, effectiveZoom, onRegion])
+  const showTextActions = (point?: { x: number; y: number }) => {
+    const selected = window.getSelection()
+    const stage = wrapper.current
+    if (!selected?.anchorNode || !stage?.contains(selected.anchorNode)) return false
+    const text = selected.toString().trim()
+    if (!text) return false
+    const stageBounds = stage.getBoundingClientRect()
+    const rangeBounds = selected.rangeCount ? selected.getRangeAt(0).getBoundingClientRect() : null
+    const x = Math.min(
+      Math.max(
+        8,
+        point?.x ?? (rangeBounds ? rangeBounds.left - stageBounds.left + rangeBounds.width / 2 : stageBounds.width / 2)
+      ),
+      Math.max(8, stageBounds.width - 8)
+    )
+    const y = Math.min(
+      Math.max(8, point?.y ?? (rangeBounds ? rangeBounds.bottom - stageBounds.top + 8 : 24)),
+      Math.max(8, stageBounds.height - 8)
+    )
+    onText(text)
+    setTextActions({ x, y, text })
+    return true
+  }
+  const contextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (interaction !== 'text') return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (showTextActions({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })) event.preventDefault()
+  }
+  const keyboardMenu = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (interaction !== 'text' || (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))) return
+    if (showTextActions()) event.preventDefault()
+  }
   const pdfBounds = (rectangle: Rectangle) => {
     const viewport = viewportRef.current
     if (!viewport) return null
@@ -614,8 +700,8 @@ function PdfCanvas({
     )
     onCaptureRegion(crop.toDataURL('image/png'), bounds)
   }
-  const extract = (limited: boolean) => {
-    const bounds = limited && completedRegion.current ? pdfBounds(completedRegion.current) : undefined
+  const extractRegion = () => {
+    const bounds = completedRegion.current ? pdfBounds(completedRegion.current) : undefined
     const items = textContent?.items.filter((item) => 'str' in item) ?? []
     onText(reconstructText(items, bounds ?? undefined))
   }
@@ -629,9 +715,12 @@ function PdfCanvas({
           onPointerMove={move}
           onPointerUp={finish}
           onPointerCancel={cancel}
+          onContextMenu={contextMenu}
+          onKeyDown={keyboardMenu}
           onLostPointerCapture={() => {
             drag.current = null
           }}
+          tabIndex={0}
           aria-label="PDF page. Drag to capture an image region."
         >
           <canvas ref={canvas} />
@@ -646,6 +735,36 @@ function PdfCanvas({
               style={{ left: region.x, top: region.y, width: region.width, height: region.height }}
             />
           )}
+          {textActions && interaction === 'text' && (
+            <div
+              className="pdf-selection-actions"
+              role="toolbar"
+              aria-label="Selected text actions"
+              style={{ left: textActions.x, top: textActions.y }}
+            >
+              <Button
+                size="sm"
+                disabled={!canCapture}
+                onClick={() => {
+                  onCaptureText(textActions.text)
+                  setTextActions(null)
+                }}
+              >
+                Capture quote
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!canCreateQa}
+                onClick={() => {
+                  onCreateQa(textActions.text)
+                  setTextActions(null)
+                }}
+              >
+                Create Q&amp;A
+              </Button>
+            </div>
+          )}
           {loading && <div className="pdf-loading">Rendering PDF…</div>}
           {error && <div className="pdf-loading">Unable to render PDF: {error}</div>}
         </div>
@@ -655,24 +774,19 @@ function PdfCanvas({
             ? 'Drag on the page to capture a region.'
             : textContent && !textContent.items.length
               ? 'No selectable text. Use Region or type evidence manually. OCR is not available.'
-              : 'Select text on the page, or edit the extracted text below.'}
+              : 'Select text to reveal capture actions. Right-click opens the same choices.'}
         </p>
       </div>
-      <div className="extraction-actions">
-        <Button variant="secondary" size="sm" disabled={!textContent} onClick={() => extract(false)}>
-          Extract page text
-        </Button>
-        {interaction === 'region' && (
-          <>
-            <Button variant="secondary" size="sm" disabled={!region?.width} onClick={() => extract(true)}>
-              Extract region text
-            </Button>
-            <Button size="sm" disabled={!region?.width || !canCapture} onClick={capture}>
-              Capture region
-            </Button>
-          </>
-        )}
-      </div>
+      {interaction === 'region' && (
+        <div className="extraction-actions">
+          <Button variant="secondary" size="sm" disabled={!region?.width} onClick={extractRegion}>
+            Extract region text
+          </Button>
+          <Button size="sm" disabled={!region?.width || !canCapture} onClick={capture}>
+            Capture region
+          </Button>
+        </div>
+      )}
     </>
   )
 }
