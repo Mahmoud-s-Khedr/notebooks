@@ -10,3 +10,6 @@ docs/test-improvement-plan.md
 # Generated guide compositions and standalone HTML are emitted by the guide builder.
 docs/user-guide.html
 docs/images/guide/**/*.svg
+
+# Supplied acceptance exports and reports must remain byte-for-byte unchanged.
+full-try/

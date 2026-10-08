@@ -8,10 +8,13 @@ export class SaveCoordinator {
     this.recorder = recorder
   }
   private pending: Promise<void> | null = null
+  async flushEditors(): Promise<void> {
+    for (const save of [...this.editors.values()]) await save()
+  }
   flush(): Promise<void> {
     if (this.pending) return this.pending
     this.pending = (async () => {
-      for (const save of [...this.editors.values()]) await save()
+      await this.flushEditors()
       await this.recorder?.stop()
     })().finally(() => {
       this.pending = null

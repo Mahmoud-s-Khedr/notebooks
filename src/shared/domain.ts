@@ -64,6 +64,7 @@ export interface Block extends Deletable {
   noteId: string
   type: BlockType
   position: number
+  source?: BlockSource | null
   data: Record<string, unknown>
   metadata: Record<string, unknown>
   createdAt: string
@@ -118,7 +119,7 @@ export interface BlockSource {
   selectionType: 'text' | 'region'
   pdfPage: number | null
   printedPage: number | null
-  bounds: { x: number; y: number; width: number; height: number } | null
+  bounds: { x: number; y: number; width: number; height: number; coordinateSpace?: 'pdf-points-bottom-left' } | null
   extractedText: string | null
   createdAt: string
 }
@@ -166,6 +167,7 @@ export interface WhisperModel {
   error: string | null
 }
 export interface TranscriptionSettings {
+  credentialPersistenceAvailable?: boolean
   openRouterConfigured: boolean
   localModels: string[]
   openRouterModels: string[]
@@ -327,6 +329,7 @@ export interface ResearchNotebookApi {
     thumbnailDataUrl(input: { assetId: string; width: number; height: number }): Promise<string | null>
   }
   transcription: {
+    review(input: { runId: string; text: string }): Promise<Block>
     create(input: {
       blockId: string
       provider: TranscriptionProviderName
@@ -353,14 +356,19 @@ export interface ResearchNotebookApi {
     migrationStatus(): Promise<LibraryMigrationStatus>
     removeOldLibrary(): Promise<void>
   }
-  exports: { start(input: { scope: ExportScope; format: ExportFormat }): Promise<Job> }
+  exports: {
+    start(input: { scope: ExportScope; format: ExportFormat }): Promise<Job | null>
+    openFolder(input: { jobId: string }): Promise<void>
+  }
   jobs: {
+    get(input: { jobId: string }): Promise<Job>
     list(): Promise<Job[]>
     cancel(input: { jobId: string }): Promise<Job>
     retry(input: { jobId: string }): Promise<Job>
   }
-  backups: { start(): Promise<Job> }
+  backups: { start(): Promise<Job | null> }
   diagnostics: {
+    cleanup(input: { kind: 'jobs' | 'diagnostics'; days?: number; apply?: boolean }): Promise<number>
     list(): Promise<DiagnosticEvent[]>
     listErrors(input?: ErrorEventFilter): Promise<ErrorEvent[]>
     getError(input: { id: string }): Promise<ErrorEvent | null>
@@ -384,7 +392,8 @@ export interface ResearchNotebookApi {
       noteId: string
       sourceDocumentId: string
       pdfPage: number
-      bounds: { x: number; y: number; width: number; height: number }
+      printedPage?: number
+      bounds: { x: number; y: number; width: number; height: number; coordinateSpace?: 'pdf-points-bottom-left' }
       imageDataUrl: string
     }): Promise<Block>
     createQaNote(input: {

@@ -14,3 +14,19 @@ asset paths and SHA-256 values. An import always creates a new notebook copy:
 every live ID is fresh, internal references are remapped, and exported IDs are
 retained only as `importedFromId` provenance metadata. Unsupported versions,
 traversal paths, missing assets, invalid JSON, and hash mismatches are rejected.
+
+October 2026 compatibility additions use existing JSON fields, without changing
+`schemaVersion: 1` or SQLite migrations. Exports normalize each selected sibling
+group to contiguous positions without changing live database positions. Imports
+also accept unique nonnegative positions with gaps, sort each sibling group,
+and normalize it to contiguous positions. Physical containment rejects
+symlink escapes; application paths use native component-aware comparisons.
+
+An audio block's `transcriptReviews` object maps run UUIDs to `{ text, reviewedAt }`.
+Recognition output and segments remain immutable. Import and duplication remap
+review keys, active run IDs, block ownership and segment IDs. Copied/imported
+queued or running records become cancelled history; they never start jobs.
+New region `bounds_json` uses an optional `coordinateSpace` value of
+`pdf-points-bottom-left`. Untagged bounds are legacy pixels, not implicitly
+converted. Optional `relationshipTargets` descriptors provide readable outgoing
+target context; they do not extend the in-scope imported relation graph.

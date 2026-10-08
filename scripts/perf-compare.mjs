@@ -1,5 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises'
-const [beforePath = 'docs/performance-before.json', afterPath = 'docs/performance-after.json'] = process.argv.slice(2)
+const [
+  beforePath = 'docs/performance-before.json',
+  afterPath = 'docs/performance-after.json',
+  outputPath = 'docs/performance-comparison.json'
+] = process.argv.slice(2)
 const before = JSON.parse(await readFile(beforePath, 'utf8'))
 const after = JSON.parse(await readFile(afterPath, 'utf8'))
 if (before.cpu !== after.cpu || before.platform !== after.platform)
@@ -32,5 +36,5 @@ const report = {
   comparisons,
   regressions: comparisons.filter((c) => c.overBudget)
 }
-await writeFile('docs/performance-comparison.json', JSON.stringify(report, null, 2) + '\n')
+await writeFile(outputPath, JSON.stringify(report, null, 2) + '\n')
 console.log(JSON.stringify(report, null, 2))

@@ -205,6 +205,7 @@ export const createResearchNotebookApi = (): ResearchNotebookApiMock => {
       thumbnailDataUrl: vi.fn().mockResolvedValue(null)
     },
     transcription: {
+      review: vi.fn().mockResolvedValue(block()),
       create: vi.fn().mockResolvedValue(job()),
       get: vi.fn().mockResolvedValue(transcriptionRun()),
       list: vi.fn().mockResolvedValue([]),
@@ -241,14 +242,16 @@ export const createResearchNotebookApi = (): ResearchNotebookApiMock => {
       migrationStatus: vi.fn().mockResolvedValue({ state: 'idle', destination: null, error: null }),
       removeOldLibrary: vi.fn().mockResolvedValue(undefined)
     },
-    exports: { start: vi.fn().mockResolvedValue(job()) },
+    exports: { start: vi.fn().mockResolvedValue(job()), openFolder: vi.fn().mockResolvedValue(undefined) },
     jobs: {
+      get: vi.fn().mockResolvedValue(job()),
       list: vi.fn().mockResolvedValue([]),
       cancel: vi.fn().mockResolvedValue(job()),
       retry: vi.fn().mockResolvedValue(job())
     },
     backups: { start: vi.fn().mockResolvedValue(job()) },
     diagnostics: {
+      cleanup: vi.fn().mockResolvedValue(0),
       list: vi.fn().mockResolvedValue([]),
       listErrors: vi.fn().mockResolvedValue([]),
       getError: vi.fn().mockResolvedValue(null),

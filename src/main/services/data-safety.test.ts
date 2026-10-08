@@ -98,7 +98,7 @@ describe('library data safety on disk', () => {
       '{ definitely not json',
       JSON.stringify({ ...original, schemaVersion: 999 }),
       JSON.stringify({ ...original, pages: [...original.pages, original.pages[0]] }),
-      JSON.stringify({ ...original, pages: [{ ...original.pages[0], position: 3 }] }),
+      JSON.stringify({ ...original, pages: [{ ...original.pages[0], position: -1 }] }),
       JSON.stringify({ ...original, assets: [{ ...original.assets[0], exportPath: '../outside.png' }] }),
       JSON.stringify({ ...original, assets: [{ ...original.assets[0], exportPath: 'assets\\bad.png' }] }),
       JSON.stringify({ ...original, assets: [{ ...original.assets[0], sha256: '0'.repeat(64) }] })
@@ -109,6 +109,117 @@ describe('library data safety on disk', () => {
       expect(count()).toBe(0)
       assertNoStaging(target.assets)
     }
+  })
+
+  it('exports media independently of empty text and preserves literal Markdown', () => {
+    const value = library()
+    const notebook = value.service.createNotebook('Title [literal]')
+    const page = value.service.createPage(notebook.id, 'P')
+    const note = value.service.createNote(page.id, 'N')
+    const asset = value.service.importAsset(notebook.id, 'image', writeFixture(value.root, 'x.png', 'image'))
+    const block = value.service.attachAsset(note.id, asset.id, 'image')
+    value.service.updateBlock(block.id, { ...block.data, text: '' })
+    value.service.createBlock(note.id, 'text', { text: '# literal [link](x)' })
+    for (const format of ['markdown', 'ai-context'] as const) {
+      const output = value.service.export(
+        { type: 'notebook', notebookId: notebook.id },
+        format,
+        join(value.root, format)
+      )
+      const text = readFileSync(join(output.directory, 'notebook.md'), 'utf8')
+      expect(text).toContain('![')
+      expect(text).toContain('assets/')
+      expect(text).toContain(String.raw`\# literal \[link\]\(x\)`)
+    }
+  })
+
+  it('round-trips scoped exports and deleted-position gaps in relative order', () => {
+    const source = library()
+    const notebook = source.service.createNotebook('Scopes')
+    source.service.createPage(notebook.id, 'First')
+    const page = source.service.createPage(notebook.id, 'Second')
+    const old = source.service.createNote(page.id, 'Deleted')
+    const note = source.service.createNote(page.id, 'Kept')
+    source.service.createBlock(note.id, 'text', { text: 'evidence' })
+    source.service.moveToTrash('note', old.id)
+    for (const scope of [
+      { type: 'notebook', notebookId: notebook.id },
+      { type: 'page', pageId: page.id },
+      { type: 'note', noteId: note.id }
+    ] as const) {
+      const output = source.service.export(scope, 'lossless-json', join(source.root, scope.type))
+      const target = library()
+      const imported = target.service.importLossless(join(output.directory, 'notebook.lossless.v1.json'))
+      const importedPage = target.service
+        .listNotebooks()
+        .find((n) => n.id === imported.notebook.id)!
+        .pages.at(-1)!
+      expect(target.service.getPageWorkspace(importedPage.id).notes[0]).toMatchObject({ title: 'Kept', position: 0 })
+    }
+  })
+
+  it('copies media references and source provenance before deleting the original', () => {
+    const value = library()
+    const notebook = value.service.createNotebook('Copies')
+    const page = value.service.createPage(notebook.id, 'P')
+    const note = value.service.createNote(page.id, 'N')
+    const pdf = value.service.importPdf(notebook.id, writeFixture(value.root, 'source.pdf', '%PDF-1.4'))
+    const original = value.service.captureSourceRegion(
+      note.id,
+      pdf.id,
+      2,
+      { x: 0, y: 0, width: 10, height: 10 },
+      'data:image/png;base64,aW1hZ2U='
+    )
+    const copy = value.service.duplicateBlock(original.id)
+    expect(value.service.getBlockSource(copy.id)).toMatchObject({ sourceDocumentId: pdf.id, pdfPage: 2 })
+    value.service.moveToTrash('block', original.id)
+    value.service.permanentlyDelete('block', original.id)
+    const output = value.service.export({ type: 'note', noteId: note.id }, 'lossless-json', join(value.root, 'export'))
+    const archive = JSON.parse(readFileSync(join(output.directory, 'notebook.lossless.v1.json'), 'utf8'))
+    expect(archive.assets).toHaveLength(2)
+    expect(value.service.diagnoseAssets(notebook.id).orphaned).toEqual([])
+  })
+
+  it('rolls back source capture and Q&A graphs and region bytes on provenance failure', () => {
+    const value = library()
+    const notebook = value.service.createNotebook('Atomic')
+    const page = value.service.createPage(notebook.id, 'P')
+    const note = value.service.createNote(page.id, 'N')
+    const pdf = value.service.importPdf(notebook.id, writeFixture(value.root, 'source.pdf', '%PDF-1.4'))
+    value.database.connection.exec(
+      "CREATE TRIGGER reject_source BEFORE INSERT ON block_sources BEGIN SELECT RAISE(ABORT, 'deliberate'); END"
+    )
+    expect(() => value.service.captureSourceText(note.id, pdf.id, 1, 4, 'text')).toThrow('deliberate')
+    expect(() => value.service.createQaNote(page.id, pdf.id, 1, 4, 'question')).toThrow('deliberate')
+    expect(() =>
+      value.service.captureSourceRegion(
+        note.id,
+        pdf.id,
+        1,
+        { x: 0, y: 0, width: 10, height: 10 },
+        'data:image/png;base64,aW1hZ2U='
+      )
+    ).toThrow('deliberate')
+    expect(value.service.getPageWorkspace(page.id).notes).toHaveLength(1)
+    expect(value.service.getPageWorkspace(page.id).notes[0].blocks).toEqual([])
+    expect(value.service.listAssets(notebook.id)).toHaveLength(1)
+    expect(readdirSync(join(value.assets, 'screenshots'))).toEqual([])
+  })
+
+  it('scopes integrity findings while tracking paths across all notebooks', async () => {
+    const value = library()
+    const first = value.service.createNotebook('First')
+    const second = value.service.createNotebook('Second')
+    const missing = value.service.importAsset(first.id, 'file', writeFixture(value.root, 'missing.bin', 'one'))
+    const corrupt = value.service.importAsset(first.id, 'file', writeFixture(value.root, 'corrupt.bin', 'two'))
+    value.service.importAsset(second.id, 'file', writeFixture(value.root, 'other.bin', 'three'))
+    rmSync(join(value.assets, missing.relativePath.replace('assets/', '')))
+    writeFixture(join(value.assets, 'files'), corrupt.relativePath.split('/').at(-1)!, 'changed')
+    const diagnostics = value.service.diagnoseAssets(first.id)
+    expect(diagnostics.untrackedFiles).toEqual([])
+    expect(diagnostics.missing.map((a) => a.id)).toEqual([missing.id])
+    expect(diagnostics.hashMismatched.map((a) => a.id)).toEqual([corrupt.id])
   })
 
   it('backs up verified managed bytes and leaves no backup residue on missing or corrupt input', async () => {

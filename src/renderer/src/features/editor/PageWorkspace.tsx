@@ -7,6 +7,7 @@ import React, {
   type DragEvent,
   type ReactElement
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Copy, FileText, GripVertical, Link2, MoreHorizontal, Plus, Trash2, Type, Volume2, X } from 'lucide-react'
 import {
   textBlockTypes,
@@ -84,7 +85,7 @@ export function PageWorkspace({
   useEffect(() => setTitle(workspace.title), [workspace.id, workspace.title])
   const createNote = async () => {
     try {
-      await saves.flush()
+      await saves.flushEditors()
       const note = await window.researchNotebook.notes.create({ pageId: workspace.id, title: 'Untitled note' })
       await reloadWorkspace(note.id)
     } catch (error) {
@@ -121,6 +122,7 @@ export function PageWorkspace({
             Notebook <span>/</span> Topic page
           </p>
           <input
+            dir="auto"
             className="page-title"
             aria-label="Page title"
             value={title}
@@ -170,6 +172,11 @@ export function PageWorkspace({
       {workspace.nextCursor && (
         <Button className="load-more" variant="secondary" onClick={() => void loadMore()}>
           Load more notes
+        </Button>
+      )}
+      {workspace.notes.length > 0 && (
+        <Button className="bottom-add-note" variant="secondary" onClick={() => void createNote()}>
+          <Plus size={16} /> Add note
         </Button>
       )}
       {!workspace.notes.length && (
@@ -226,6 +233,17 @@ function NoteEditor({
   const createBlock = async (type: TextBlockType = 'text') => {
     try {
       await window.researchNotebook.blocks.create({ noteId: note.id, type, data: { text: '' } })
+      await reloadWorkspace()
+    } catch (error) {
+      onError(error)
+    }
+  }
+  const attach = async (kind: 'image' | 'screenshot' | 'audio' | 'file') => {
+    if (!notebookId) return
+    try {
+      await saves.flushEditors()
+      const asset = await window.researchNotebook.assets.import({ notebookId, kind })
+      if (asset) await window.researchNotebook.assets.attach({ noteId: note.id, assetId: asset.id, type: kind })
       await reloadWorkspace()
     } catch (error) {
       onError(error)
@@ -289,6 +307,7 @@ function NoteEditor({
     >
       <div className="note-heading">
         <input
+          dir="auto"
           aria-label="Note title"
           value={noteTitle}
           onChange={(event) => setNoteTitle(event.target.value)}
@@ -308,6 +327,7 @@ function NoteEditor({
           Move note to trash
         </Button>
       </div>
+      <div className="note-recording-slot" data-recording-note={note.id} />
       {note.blocks.map((block, index) => (
         <BlockEditor
           key={block.id}
@@ -341,13 +361,29 @@ function NoteEditor({
           size="sm"
           onClick={() =>
             void saves
-              .flush()
+              .flushEditors()
               .then(() => saves.recorder?.start(note.id))
               .catch(onError)
           }
         >
           Record audio
         </Button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <Button variant="ghost" size="sm">
+              Attach media
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="menu-content" align="start">
+              {(['image', 'screenshot', 'audio', 'file'] as const).map((kind) => (
+                <DropdownMenu.Item className="menu-item" key={kind} onSelect={() => void attach(kind)}>
+                  Attach {kind}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         <Popover.Root open={slashOpen} onOpenChange={setSlashOpen}>
           <Popover.Trigger asChild>
             <Button variant="ghost" className="slash-hint" aria-label="Open block command menu">
@@ -465,16 +501,16 @@ function BlockEditor({
   const textBased = textBlockTypes.includes(block.type as TextBlockType)
   useEffect(() => setText(typeof block.data.text === 'string' ? block.data.text : ''), [block.id, block.data.text])
   const save = useCallback(async () => {
-    if (text !== block.data.text) {
+    if (textBased && text !== block.data.text) {
       await window.researchNotebook.blocks.update({ blockId: block.id, data: { ...block.data, text } })
     }
-  }, [text, block.id, block.data])
+  }, [text, textBased, block.id, block.data])
   useEffect(() => {
-    saves.editors.set(block.id, save)
+    if (textBased) saves.editors.set(block.id, save)
     return () => {
       saves.editors.delete(block.id)
     }
-  }, [saves, block.id, save])
+  }, [saves, block.id, textBased, save])
   const duplicate = async () => {
     try {
       await window.researchNotebook.blocks.duplicate({ blockId: block.id })
@@ -510,7 +546,7 @@ function BlockEditor({
   }
   const viewSource = async () => {
     try {
-      const source = await window.researchNotebook.sources.getBlockSource({ blockId: block.id })
+      const source = block.source ?? (await window.researchNotebook.sources.getBlockSource({ blockId: block.id }))
       if (source) {
         onViewSource(source)
       }
@@ -565,7 +601,7 @@ function BlockEditor({
                     Add answer
                   </DropdownMenu.Item>
                 )}
-                {typeof block.data.sourceDocumentId === 'string' && (
+                {(Boolean(block.source) || typeof block.data.sourceDocumentId === 'string') && (
                   <DropdownMenu.Item className="menu-item" onSelect={() => void viewSource()}>
                     View source
                   </DropdownMenu.Item>
@@ -583,6 +619,7 @@ function BlockEditor({
         </div>
         {textBased ? (
           <textarea
+            dir="auto"
             aria-label={`${label(block.type)} block`}
             value={text}
             onChange={(event) => setText(event.target.value)}
@@ -606,10 +643,11 @@ function BlockEditor({
         ) : (
           <AssetBlock block={block} onError={onError} />
         )}
-        {typeof block.data.sourceDocumentId === 'string' && (
+        {(Boolean(block.source) || typeof block.data.sourceDocumentId === 'string') && (
           <button className="provenance" onClick={() => void viewSource()}>
             <FileText size={14} /> Source document · PDF p.
-            {typeof block.data.pdfPage === 'number' ? block.data.pdfPage : '–'} ↗
+            {block.source?.pdfPage ?? (typeof block.data.pdfPage === 'number' ? block.data.pdfPage : '–')}
+            {block.source?.printedPage ? ` · print p. ${block.source.printedPage}` : ''} ↗
           </button>
         )}
       </div>
@@ -709,7 +747,7 @@ function BlockInspector({
             ))}
           </select>
         </label>
-        {typeof block.data.sourceDocumentId === 'string' && (
+        {(Boolean(block.source) || typeof block.data.sourceDocumentId === 'string') && (
           <Button variant="secondary" onClick={() => void onViewSource()}>
             View source provenance
           </Button>
@@ -771,6 +809,7 @@ function BlockInspector({
 }
 
 function AssetBlock({ block, onError }: { block: Block; onError: (error: unknown) => void }): ReactElement {
+  const audio = useRef<HTMLAudioElement>(null)
   const [url, setUrl] = useState('')
   const [near, setNear] = useState(false)
   const target = useRef<HTMLDivElement>(null)
@@ -852,8 +891,17 @@ function AssetBlock({ block, onError }: { block: Block; onError: (error: unknown
       ) : block.type === 'audio' ? (
         <div className="audio-block">
           <Volume2 size={18} />
-          {url ? <audio controls preload="none" src={url} /> : <p>Loading recording…</p>}
-          <TranscriptionPanel block={block} onError={onError} />
+          {url ? <audio ref={audio} controls preload="none" src={url} /> : <p>Loading recording…</p>}
+          <TranscriptionPanel
+            block={block}
+            onError={onError}
+            onSeek={(seconds) => {
+              if (audio.current) {
+                audio.current.currentTime = seconds
+                void audio.current.play().catch(onError)
+              }
+            }}
+          />
         </div>
       ) : url ? (
         <a
@@ -880,6 +928,27 @@ export function AudioRecorder({
   onError: (error: unknown) => void
 }): ReactElement {
   const saves = useSaves()
+  const [host, setHost] = useState<HTMLElement | null>(null)
+  const [visible, setVisible] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [destinationId, setDestinationId] = useState<string | null>(null)
+  useEffect(() => {
+    const locate = () =>
+      setHost(destinationId ? document.querySelector<HTMLElement>(`[data-recording-note="${destinationId}"]`) : null)
+    locate()
+    const observer = new MutationObserver(locate)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [destinationId])
+  useEffect(() => {
+    if (!host || typeof IntersectionObserver === 'undefined') {
+      setVisible(Boolean(host))
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting))
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [host])
   const destination = useRef<string | null>(null)
   const pendingAudio = useRef<string | null>(null)
   const recordingOperation = useRef<string | null>(null)
@@ -908,6 +977,7 @@ export function AudioRecorder({
     if (session.current || pendingAudio.current || starting.current || saving.current || needsRefresh.current)
       throw new Error('Save the current recording before starting another.')
     destination.current = target
+    setDestinationId(target)
     recordingOperation.current = crypto.randomUUID()
     const operation = (async () => {
       try {
@@ -986,6 +1056,7 @@ export function AudioRecorder({
   }
   const stop = (): Promise<void> => {
     if (saving.current) return saving.current
+    setIsSaving(true)
     const operation = (async () => {
       await starting.current
       const current = session.current
@@ -1058,6 +1129,7 @@ export function AudioRecorder({
     void operation
       .finally(() => {
         saving.current = null
+        setIsSaving(false)
       })
       .catch(() => undefined)
     return operation
@@ -1086,16 +1158,22 @@ export function AudioRecorder({
       : microphone === 'muted'
         ? 'Microphone muted'
         : 'Recording'
-  return (
-    <div className="audio-recorder-control">
+  if (!recording && !failed && !isSaving) return <></>
+  const destinationTitle =
+    host?.closest('article')?.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value ?? 'Recording note'
+  const controls = (
+    <div className="audio-recorder-control" role="region" aria-label="Recording controls">
+      <strong dir="auto">{destinationTitle}</strong>
+      {isSaving && <span role="status">Saving recording…</span>}
+      {failed && <span role="alert">Recording retained. Retry saving.</span>}
       <Button
         variant={recording ? 'danger' : 'ghost'}
         size="sm"
         aria-pressed={recording}
-        disabled={!noteId && !recording && !failed}
+        disabled={isSaving || (!noteId && !recording && !failed)}
         onClick={() => void (recording || failed ? stop() : start(noteId!)).catch(onError)}
       >
-        <Volume2 size={15} /> {failed ? 'Retry save' : recording ? 'Stop recording' : 'Record audio'}
+        <Volume2 size={15} /> {failed ? 'Retry save' : recording ? 'Stop recording' : 'Saving…'}
       </Button>
       {recording && (
         <span className={`recording-indicator microphone-${microphone}`} role="status" aria-live="polite">
@@ -1118,9 +1196,39 @@ export function AudioRecorder({
       )}
     </div>
   )
+  return (
+    <>
+      {host ? createPortal(controls, host) : controls}
+      {host && !visible && (
+        <div className="recording-fallback" role="status">
+          <span dir="auto">
+            {failed ? 'Recording needs save retry' : isSaving ? 'Saving recording' : 'Recording'} · {destinationTitle}
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              host.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              host.closest('article')?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
+            }}
+          >
+            Jump to recording
+          </Button>
+        </div>
+      )}
+    </>
+  )
 }
 
-function TranscriptionPanel({ block, onError }: { block: Block; onError: (error: unknown) => void }): ReactElement {
+function TranscriptionPanel({
+  block,
+  onError,
+  onSeek
+}: {
+  block: Block
+  onError: (error: unknown) => void
+  onSeek: (seconds: number) => void
+}): ReactElement {
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -1128,6 +1236,9 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
       mounted.current = false
     }
   }, [])
+  const activeRunId = useRef<string | null>(null)
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
+  const saves = useSaves()
   const [provider, setProvider] = useState<'local' | 'openrouter'>('local')
   const [readiness, setReadiness] = useState<import('../../../../shared/domain').TranscriptionSettings | null>(null)
   useEffect(() => {
@@ -1158,7 +1269,8 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
     const nextRuns = await window.researchNotebook.transcription.list({ blockId: block.id })
     if (!mounted.current) return
     setRuns(nextRuns)
-    const activeRun = nextRuns.find((run) => run.id === block.data.activeTranscriptionRunId) ?? nextRuns[0]
+    const activeRun =
+      nextRuns.find((run) => run.id === (activeRunId.current ?? block.data.activeTranscriptionRunId)) ?? nextRuns[0]
     if (!activeRun || activeRun.provider !== 'local' || !['queued', 'running'].includes(activeRun.status)) {
       setProgress(null)
       return
@@ -1174,7 +1286,7 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
     provider === 'openrouter'
       ? Boolean(readiness?.openRouterConfigured)
       : Boolean(readiness?.localBinaryAvailable && readiness.localModelAvailable)
-  const active = runs.find((run) => run.id === block.data.activeTranscriptionRunId) ?? runs[0]
+  const active = runs.find((run) => run.id === (currentRunId ?? block.data.activeTranscriptionRunId)) ?? runs[0]
   useEffect(() => {
     if (!active || !['queued', 'running'].includes(active.status)) return
     const timer = window.setInterval(() => void load().catch(report), 1200)
@@ -1183,11 +1295,14 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
   const start = async () => {
     setBusy(true)
     try {
-      await window.researchNotebook.transcription.create({
+      await saves.flushEditors()
+      const created = await window.researchNotebook.transcription.create({
         blockId: block.id,
         provider,
         language: language || undefined
       })
+      activeRunId.current = 'transcriptionRunId' in created ? created.transcriptionRunId : created.id
+      setCurrentRunId(activeRunId.current)
       await load()
     } catch (error) {
       onError(error)
@@ -1232,12 +1347,130 @@ function TranscriptionPanel({ block, onError }: { block: Block; onError: (error:
         </Button>
       </div>
       {active && (
-        <small>
-          {active.provider} · {active.status}
+        <div className="transcript-status" role="status">
+          {active.provider} · {active.model} · {active.status}
           {progress !== null ? ` · ${progress}%` : ''}
-          {active.transcriptText ? ` · ${active.transcriptText}` : ''}
-        </small>
+          {active.errorMessage && <p className="danger-text">{active.errorMessage}</p>}
+        </div>
       )}
+      {active && ['failed', 'cancelled'].includes(active.status) && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            void window.researchNotebook.transcription
+              .retry({ runId: active.id })
+              .then((created) => {
+                activeRunId.current = 'transcriptionRunId' in created ? created.transcriptionRunId : created.id
+                setCurrentRunId(activeRunId.current)
+                return load()
+              })
+              .catch(report)
+          }
+        >
+          Retry transcription
+        </Button>
+      )}
+      <TranscriptReview block={block} runs={runs} onSeek={onSeek} onError={report} />
     </div>
+  )
+}
+
+function TranscriptReview({
+  block,
+  runs,
+  onSeek,
+  onError
+}: {
+  block: Block
+  runs: import('../../../../shared/domain').TranscriptionRun[]
+  onSeek: (seconds: number) => void
+  onError: (error: unknown) => void
+}): ReactElement {
+  const saves = useSaves()
+  const [selected, setSelected] = useState('')
+  const completed = runs.filter((run) => run.status === 'completed')
+  useEffect(() => {
+    if (!selected && completed[0]) setSelected(completed[0].id)
+  }, [selected, completed])
+  const run = completed.find((r) => r.id === selected) ?? completed[0]
+  const reviews = block.data.transcriptReviews as Record<string, { text: string }> | undefined
+  const savedReviews = useRef(new Map<string, string>())
+  const [text, setText] = useState('')
+  const persisted = useRef('')
+  const runId = run?.id
+  useEffect(() => {
+    const value = run ? (savedReviews.current.get(run.id) ?? reviews?.[run.id]?.text ?? run.transcriptText ?? '') : ''
+    persisted.current = value
+    setText(value)
+    // Initialize per run; workspace refreshes must not overwrite dirty corrections.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId])
+  const save = useCallback(async () => {
+    if (!runId || text === persisted.current) return
+    const updated = await window.researchNotebook.transcription.review({ runId, text })
+    const updatedReviews = updated.data.transcriptReviews as Record<string, { text: string }> | undefined
+    // Keep successful saves ahead of workspace props that may still contain older reviews.
+    savedReviews.current.set(runId, updatedReviews?.[runId]?.text ?? text)
+    persisted.current = text
+  }, [runId, text])
+  useEffect(() => {
+    saves.editors.set(`transcript:${block.id}`, save)
+    return () => {
+      saves.editors.delete(`transcript:${block.id}`)
+    }
+  }, [saves, block.id, save])
+  if (!run) return <></>
+  return (
+    <section className="transcript-review" aria-label="Transcript review">
+      <div className="transcript-review-heading">
+        <strong>Transcript review</strong>
+        <select
+          aria-label="Transcript run"
+          value={run.id}
+          onChange={(event) => {
+            const id = event.target.value
+            void save()
+              .then(() => setSelected(id))
+              .catch(onError)
+          }}
+        >
+          {completed.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.model} · {new Date(r.createdAt).toLocaleString()}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="dialog-copy">
+        Reviewed text is displayed and exported by default. Original segments retain their recognition timestamps.
+      </p>
+      <textarea
+        dir="auto"
+        aria-label="Reviewed transcript"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => void save().catch(onError)}
+      />
+      <details>
+        <summary>Original recognition and segments</summary>
+        <p dir="auto" className="original-transcript">
+          {run.transcriptText}
+        </p>
+        <ol className="transcript-segments">
+          {run.segments.map((segment) => (
+            <li key={segment.id}>
+              <button
+                onClick={() => onSeek(segment.startMs / 1000)}
+                aria-label={`Play segment at ${segment.startMs / 1000} seconds`}
+              >
+                {(segment.startMs / 1000).toFixed(1)}s
+              </button>
+              <span dir="auto">{segment.text}</span>
+            </li>
+          ))}
+        </ol>
+      </details>
+    </section>
   )
 }

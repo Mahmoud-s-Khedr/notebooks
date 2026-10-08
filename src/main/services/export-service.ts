@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import type { ExportFormat, ExportResult, ExportScope } from '../../shared/domain'
 import { blockTypes, relationTypes } from '../../shared/domain'
+import { directoryContains, physicalPath } from '../library-path'
 import { PdfRenderer } from './pdf-renderer'
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
@@ -23,6 +24,14 @@ export type ScopeData = {
   segments: Array<Record<string, unknown>>
   sources: Array<Record<string, unknown>>
   blockSources: Array<Record<string, unknown>>
+  relationshipTargets?: Array<{
+    fromBlockId: string
+    relationType: string
+    targetId: string
+    targetText: string
+    noteTitle: string
+    pageTitle: string
+  }>
 }
 
 const uuid = (id: unknown) =>
@@ -79,14 +88,43 @@ export function validateLosslessArchive(archive: Record<string, any>, root: stri
       groups.set(String(x[parent]), [...(groups.get(String(x[parent])) ?? []), x.position])
     )
     if (
-      [...groups.values()].some(
-        (v) =>
-          !v.every(Number.isInteger) ||
-          new Set(v).size !== v.length ||
-          [...v].sort((a, b) => a - b).some((n, i) => n !== i)
-      )
+      [...groups.values()].some((v) => !v.every((n) => Number.isInteger(n) && n >= 0) || new Set(v).size !== v.length)
     )
       throw new Error('The archive has invalid hierarchy ordering.')
+  }
+  for (const block of archive.blocks) {
+    const data = typeof block.data_json === 'string' ? JSON.parse(block.data_json) : block.data_json
+    if (data.transcriptReviews !== undefined) {
+      if (
+        !data.transcriptReviews ||
+        typeof data.transcriptReviews !== 'object' ||
+        Array.isArray(data.transcriptReviews)
+      )
+        throw new Error('The archive contains invalid transcript reviews.')
+      for (const [id, review] of Object.entries(data.transcriptReviews) as [string, any][]) {
+        if (
+          !archive.runs.some((run: any) => run.id === id && run.block_id === block.id) ||
+          typeof review?.text !== 'string'
+        )
+          throw new Error('The archive contains invalid transcript reviews.')
+      }
+    }
+  }
+  for (const source of archive.blockSources) {
+    if (!source.bounds_json) continue
+    let bounds: any
+    try {
+      bounds = typeof source.bounds_json === 'string' ? JSON.parse(source.bounds_json) : source.bounds_json
+    } catch {
+      throw new Error('The archive contains invalid source bounds.')
+    }
+    if (
+      ![bounds?.x, bounds?.y, bounds?.width, bounds?.height].every(Number.isFinite) ||
+      bounds.width <= 0 ||
+      bounds.height <= 0 ||
+      (bounds.coordinateSpace !== undefined && bounds.coordinateSpace !== 'pdf-points-bottom-left')
+    )
+      throw new Error('The archive contains invalid source bounds.')
   }
   for (const asset of archive.assets) {
     if (
@@ -100,7 +138,11 @@ export function validateLosslessArchive(archive: Record<string, any>, root: stri
     )
       throw new Error('The archive contains an unsafe asset path or checksum.')
     const source = join(root, ...asset.exportPath.split('/'))
-    if (!existsSync(source) || createHash('sha256').update(readFileSync(source)).digest('hex') !== asset.sha256)
+    if (
+      !directoryContains(physicalPath(root), physicalPath(source)) ||
+      !existsSync(source) ||
+      createHash('sha256').update(readFileSync(source)).digest('hex') !== asset.sha256
+    )
       throw new Error('An archive asset failed its integrity check.')
   }
 }
@@ -110,8 +152,14 @@ export class ExportService {
     private readonly db: Database.Database,
     private readonly assetPath: (relative: string) => string
   ) {}
-  start(scope: ExportScope, format: ExportFormat, destination: string, renderedPdf?: Buffer): ExportResult {
-    const data = this.readScope(scope)
+  start(
+    scope: ExportScope,
+    format: ExportFormat,
+    destination: string,
+    renderedPdf?: Buffer,
+    snapshot?: ScopeData
+  ): ExportResult {
+    const data = structuredClone(snapshot ?? this.snapshot(scope))
     // An archive contains only the selected active rows, whose live positions may have gaps.
     for (const [records, parent] of [
       [data.pages, 'notebook_id'],
@@ -147,7 +195,9 @@ export class ExportService {
         const target = join(assetsDirectory, filename)
         copyFileSync(this.assetPath(relative), target)
         asset.exportPath = posix.join('assets', filename)
-        asset.sha256 = createHash('sha256').update(readFileSync(target)).digest('hex')
+        const hash = createHash('sha256').update(readFileSync(target)).digest('hex')
+        if (asset.sha256 && hash !== asset.sha256) throw new Error('An exported asset failed its integrity check.')
+        asset.sha256 = hash
       }
       const manifest = { schemaVersion: 1, exportedAt: new Date().toISOString(), scope, format, ...data }
       if (format === 'lossless-json')
@@ -199,22 +249,40 @@ export class ExportService {
       throw error
     }
   }
-  printableDocument(scope: ExportScope): string {
-    const data = this.readScope(scope)
+  snapshot(scope: ExportScope): ScopeData {
+    return this.db.transaction(() => this.readScope(scope))()
+  }
+  stageSnapshot(data: ScopeData, directory: string): ExportService {
+    mkdirSync(directory, { recursive: true })
+    for (const asset of data.assets) {
+      const source = this.assetPath(String(asset.relative_path))
+      const target = join(directory, String(asset.id))
+      copyFileSync(source, target)
+      const hash = createHash('sha256').update(readFileSync(target)).digest('hex')
+      if (asset.sha256 && hash !== asset.sha256) throw new Error('An exported asset failed its integrity check.')
+    }
+    return new ExportService(this.db, (relative) => {
+      const asset = data.assets.find((a) => a.relative_path === relative)
+      if (!asset) throw new Error('Asset is outside the export snapshot.')
+      return join(directory, String(asset.id))
+    })
+  }
+  printableDocument(scope: ExportScope, snapshot?: ScopeData): string {
+    const data = snapshot ?? this.snapshot(scope)
     const blocksByNote = new Map<string, Array<Record<string, unknown>>>()
     data.blocks.forEach((block) =>
       blocksByNote.set(String(block.note_id), [...(blocksByNote.get(String(block.note_id)) ?? []), block])
     )
     const pages = new Map(data.pages.map((page) => [String(page.id), page.title]))
     const assets = new Map(data.assets.map((asset) => [String(asset.id), asset]))
-    let html = `<h1>${PdfRenderer.text(data.notebook.title)}</h1>`
+    let html = `<title>${PdfRenderer.text(String(data.notebook.title).slice(0, 150))}</title><h1 dir="auto">${PdfRenderer.text(data.notebook.title)}</h1>`
     for (const note of data.notes) {
-      html += `<section><h2>${PdfRenderer.text(pages.get(String(note.page_id)) ?? 'Page')}</h2><h3>${PdfRenderer.text(note.title)}</h3>`
+      html += `<section><h2 dir="auto">${PdfRenderer.text(pages.get(String(note.page_id)) ?? 'Page')}</h2><h3 dir="auto">${PdfRenderer.text(note.title)}</h3>`
       for (const block of blocksByNote.get(String(note.id)) ?? []) {
         const payload = JSON.parse(String(block.data_json ?? '{}')) as Record<string, unknown>
         const type = String(block.type)
         html += `<div class="label">${PdfRenderer.text(type)}</div>`
-        if (typeof payload.text === 'string') html += `<p>${PdfRenderer.text(payload.text).replace(/\n/g, '<br>')}</p>`
+        if (typeof payload.text === 'string') html += this.paragraphs(payload.text)
         if (typeof payload.assetId === 'string') {
           const asset = assets.get(payload.assetId)
           if (asset) {
@@ -226,9 +294,11 @@ export class ExportService {
         }
         if (type === 'audio') {
           const run = data.runs.find((entry) => entry.id === payload.activeTranscriptionRunId)
-          if (run?.transcript_text)
-            html += `<h4>Transcription</h4><p>${PdfRenderer.text(run.transcript_text).replace(/\n/g, '<br>')}</p>`
+          if (run && (run.transcript_text || this.hasReview(payload, run)))
+            html += `<h4>${this.hasReview(payload, run) ? 'Reviewed transcript' : 'Transcription'}</h4>${this.paragraphs(this.reviewed(payload, run))}`
         }
+        for (const citation of this.citations(data, block))
+          html += `<p dir="auto" class="label">${PdfRenderer.text(citation)}</p>`
       }
       html += '</section>'
     }
@@ -263,7 +333,7 @@ export class ExportService {
       .all(scopeId) as Array<Record<string, unknown>>
     const notes = this.db
       .prepare(
-        `SELECT n.* FROM notes n JOIN pages p ON p.id=n.page_id WHERE p.notebook_id=? AND n.deleted_at IS NULL ${scope.type === 'note' ? 'AND n.id=?' : scope.type === 'page' ? 'AND n.page_id=?' : ''} ORDER BY n.page_id,n.position`
+        `SELECT n.* FROM notes n JOIN pages p ON p.id=n.page_id WHERE p.notebook_id=? AND n.deleted_at IS NULL ${scope.type === 'note' ? 'AND n.id=?' : scope.type === 'page' ? 'AND n.page_id=?' : ''} AND p.deleted_at IS NULL ORDER BY p.position,n.position`
       )
       .all(...(scope.type === 'notebook' ? [notebookId] : [notebookId, scopeId])) as Array<Record<string, unknown>>
     const noteIds = notes.map((n) => String(n.id))
@@ -309,6 +379,20 @@ export class ExportService {
         `SELECT * FROM block_relations WHERE from_block_id IN (${blockMarks}) AND to_block_id IN (${blockMarks}) ORDER BY created_at`
       )
       .all(...blockIds, ...blockIds) as Array<Record<string, unknown>>
+    const relationshipTargets = (
+      this.db
+        .prepare(
+          `SELECT r.from_block_id AS fromBlockId, r.relation_type AS relationType, b.id AS targetId, b.data_json, b.type, n.title AS noteTitle, p.title AS pageTitle FROM block_relations r JOIN blocks b ON b.id=r.to_block_id JOIN notes n ON n.id=b.note_id JOIN pages p ON p.id=n.page_id WHERE r.from_block_id IN (${blockMarks}) AND b.deleted_at IS NULL AND n.deleted_at IS NULL AND p.deleted_at IS NULL ORDER BY r.created_at`
+        )
+        .all(...blockIds) as Array<Record<string, unknown>>
+    ).map((row) => ({
+      fromBlockId: String(row.fromBlockId),
+      relationType: String(row.relationType),
+      targetId: String(row.targetId),
+      targetText: String(JSON.parse(String(row.data_json)).text ?? row.type),
+      noteTitle: String(row.noteTitle),
+      pageTitle: String(row.pageTitle)
+    }))
     const runs = this.db
       .prepare(`SELECT * FROM transcription_runs WHERE block_id IN (${blockMarks}) ORDER BY created_at`)
       .all(...blockIds) as Array<Record<string, unknown>>
@@ -339,33 +423,69 @@ export class ExportService {
         if (!seen.has(String(asset.id))) assets.push(asset)
       })
     }
-    return { notebook, pages, notes, blocks, assets, relations, runs, segments, sources, blockSources }
+    return {
+      notebook,
+      pages,
+      notes,
+      blocks,
+      assets,
+      relations,
+      runs,
+      segments,
+      sources,
+      blockSources,
+      relationshipTargets
+    }
+  }
+  private paragraphs(value: unknown): string {
+    return String(value ?? '')
+      .split('\n')
+      .map((line) => `<p dir="auto">${PdfRenderer.text(line)}</p>`)
+      .join('')
+  }
+  private hasReview(payload: Record<string, unknown>, run: Record<string, unknown>): boolean {
+    return Object.hasOwn((payload.transcriptReviews as Record<string, unknown>) ?? {}, String(run.id))
+  }
+  private reviewed(payload: Record<string, unknown>, run: Record<string, unknown>): string {
+    const reviews = payload.transcriptReviews as Record<string, { text: string }> | undefined
+    return reviews?.[String(run.id)]?.text ?? String(run.transcript_text ?? '')
+  }
+  private citations(data: ScopeData, block: Record<string, unknown>): string[] {
+    const citations = data.blockSources
+      .filter((s) => s.block_id === block.id)
+      .map((s) => {
+        const source = data.sources.find((source) => source.id === s.source_document_id)
+        return `Source: ${source?.title ?? 'PDF'}; PDF page ${s.pdf_page ?? '?'}${s.printed_page == null ? '' : `; printed page ${s.printed_page}`}`
+      })
+    for (const relation of data.relationshipTargets ?? [])
+      if (relation.fromBlockId === block.id)
+        citations.push(
+          `${relation.relationType}: ${relation.pageTitle} / ${relation.noteTitle} / ${relation.targetText} (${relation.targetId})`
+        )
+    return citations
   }
   private markdown(data: ScopeData, semantic: boolean): string {
-    const blocksByNote = new Map<string, Array<Record<string, unknown>>>()
-    data.blocks.forEach((block) => {
-      const list = blocksByNote.get(String(block.note_id)) ?? []
-      list.push(block)
-      blocksByNote.set(String(block.note_id), list)
-    })
+    const literal = (value: unknown) => String(value ?? '').replace(/[\\`*_{}[\]()<>#+.!|~-]/g, '\\$&')
     const pageNames = new Map(data.pages.map((page) => [String(page.id), String(page.title)]))
-    let output = `# ${data.notebook.title}\n\n`
+    let output = `# ${literal(data.notebook.title)}\n\n`
     for (const note of data.notes) {
-      output += `## ${pageNames.get(String(note.page_id)) ?? 'Page'} / ${note.title}\n\n`
-      for (const block of blocksByNote.get(String(note.id)) ?? []) {
+      output += `## ${literal(pageNames.get(String(note.page_id)) ?? 'Page')} / ${literal(note.title)}\n\n`
+      for (const block of data.blocks.filter((b) => b.note_id === note.id)) {
         const type = String(block.type)
         const payload = JSON.parse(String(block.data_json ?? '{}')) as Record<string, unknown>
         const label = semantic ? `[${type === 'source_text' ? 'SOURCE' : type.toUpperCase()}] ` : ''
-        if (typeof payload.text === 'string') output += `${label}${payload.text}\n\n`
-        else if (typeof payload.assetId === 'string') {
+        if (typeof payload.text === 'string' && payload.text) output += `${label}${literal(payload.text)}\n\n`
+        if (typeof payload.assetId === 'string') {
           const asset = data.assets.find((item) => item.id === payload.assetId)
-          output += `${label}[${payload.filename ?? type}](${asset?.exportPath ?? 'assets/missing'})\n\n`
-          if (type === 'audio') {
-            const run = data.runs.find((item) => item.id === payload.activeTranscriptionRunId)
-            if (run?.transcript_text)
-              output += `${semantic ? '[AUDIO TRANSCRIPT] ' : 'Transcript: '}${run.transcript_text}\n\n`
-          }
+          const image = ['image', 'screenshot'].includes(type) ? '!' : ''
+          output += `${label}${image}[${literal(payload.filename ?? type)}](${asset?.exportPath ?? 'assets/missing'})\n\n`
         }
+        if (type === 'audio') {
+          const run = data.runs.find((item) => item.id === payload.activeTranscriptionRunId)
+          if (run && (run.transcript_text || this.hasReview(payload, run)))
+            output += `${this.hasReview(payload, run) ? 'Reviewed transcript' : 'Transcript'}: ${literal(this.reviewed(payload, run))}\n\n`
+        }
+        for (const citation of this.citations(data, block)) output += `${literal(citation)}\n\n`
       }
     }
     return output

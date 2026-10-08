@@ -6,9 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const pdf = vi.hoisted(() => {
   const renderPage = vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() })
   const getPage = vi.fn(async (number: number) => ({
-    getViewport: () => ({ width: 200, height: 100 }),
+    getViewport: () => ({ width: 200, height: 100, convertToPdfPoint: (x: number, y: number) => [x, 100 - y] }),
     render: renderPage,
-    getTextContent: async () => ({ items: [{ str: `Fixture PDF text page ${number}` }] })
+    getTextContent: async () => ({
+      items: [
+        { str: `Fixture PDF text page ${number}`, transform: [1, 0, 0, 12, 0, 80], height: 12, width: 180, dir: 'ltr' }
+      ]
+    })
   }))
   const getDocument = vi.fn(() => ({
     promise: Promise.resolve({ numPages: 2, getPage }),
@@ -27,14 +31,7 @@ vi.mock('pdfjs-dist', () => ({
 }))
 
 import { SourceWorkspace } from './SourceWorkspace'
-import {
-  asset,
-  createResearchNotebookApi,
-  installResearchNotebookApi,
-  note,
-  source,
-  workspace
-} from '../../test/support'
+import { createResearchNotebookApi, installResearchNotebookApi, note, source, workspace } from '../../test/support'
 
 const callbacks = () => ({ onSaved: vi.fn().mockResolvedValue(undefined), onError: vi.fn(), onUtilities: vi.fn() })
 
@@ -63,8 +60,8 @@ describe('SourceWorkspace core source-capture workflow', () => {
     render(<SourceWorkspace notebookId={null} workspace={null} activeNoteId={null} {...callbacks()} />)
 
     expect(await screen.findByText('Import a PDF to read it beside your notes.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Attach media' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Import PDF' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Attach media' })).not.toBeInTheDocument()
   })
 
   it('imports a PDF and refreshes source choices', async () => {
@@ -82,7 +79,7 @@ describe('SourceWorkspace core source-capture workflow', () => {
         {...callbacks()}
       />
     )
-    await user.click(screen.getByRole('button', { name: 'Import' }))
+    await user.click(screen.getByRole('button', { name: 'Import PDF' }))
 
     await waitFor(() => expect(api.sources.importPdf).toHaveBeenCalledWith({ notebookId: 'notebook-1' }))
     expect(api.sources.list).toHaveBeenCalledWith({ notebookId: 'notebook-1' })
@@ -109,8 +106,12 @@ describe('SourceWorkspace core source-capture workflow', () => {
 
     expect(await screen.findByText('of 2')).toBeVisible()
     const selectedText = screen.getByRole('textbox', { name: 'Selected PDF text' })
+    expect(selectedText).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Extract page text' }))
     await waitFor(() => expect(selectedText).toHaveValue('Fixture PDF text page 1'))
     await user.click(screen.getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Extract page text' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Extract page text' }))
     await waitFor(() => expect(selectedText).toHaveValue('Fixture PDF text page 2'))
     await user.type(screen.getByRole('spinbutton', { name: 'Printed page' }), '12')
     await user.click(screen.getByRole('button', { name: 'Capture text' }))
@@ -127,13 +128,15 @@ describe('SourceWorkspace core source-capture workflow', () => {
     expect(onSaved).toHaveBeenCalled()
   })
 
-  it('captures regions using deterministic canvas coordinates and dispatches attached media', async () => {
+  it.each([
+    [10, 20, 60, 60],
+    [60, 60, 10, 20],
+    [10, 60, 60, 20],
+    [60, 20, 10, 60]
+  ])('normalizes region drag %j and keeps released selections stable', async (x1, y1, x2, y2) => {
     const user = userEvent.setup()
-    const document = source()
-    api.sources.list.mockResolvedValue([document])
+    api.sources.list.mockResolvedValue([source()])
     api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
-    api.assets.import.mockResolvedValue(asset({ id: 'audio-asset', kind: 'audio' }))
-
     render(
       <SourceWorkspace
         notebookId="notebook-1"
@@ -143,43 +146,37 @@ describe('SourceWorkspace core source-capture workflow', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Region' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Extract page text' })).toBeEnabled())
+    const stage = screen.getByLabelText('PDF page. Drag to capture an image region.')
+    fireEvent.pointerDown(stage, { clientX: x1, clientY: y1, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(stage, { clientX: x2, clientY: y2, pointerId: 1 })
+    fireEvent.pointerUp(stage, { clientX: x2, clientY: y2, pointerId: 1 })
+    fireEvent.pointerMove(stage, { clientX: 99, clientY: 99, pointerId: 1 })
+    expect(api.sources.captureRegion).not.toHaveBeenCalled()
+    await user.type(screen.getByLabelText('Printed page'), '7')
+    await user.click(screen.getByRole('button', { name: 'Capture region' }))
+    expect(api.sources.captureRegion).toHaveBeenCalledWith({
+      noteId: 'note-1',
+      sourceDocumentId: 'source-1',
+      pdfPage: 1,
+      printedPage: 7,
+      bounds: { x: 10, y: 40, width: 50, height: 40, coordinateSpace: 'pdf-points-bottom-left' },
+      imageDataUrl: 'data:image/png;base64,renderer-test-capture'
+    })
+  })
+
+  it('cancels an unfinished region without creating a capture', async () => {
+    const user = userEvent.setup()
+    api.sources.list.mockResolvedValue([source()])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    render(<SourceWorkspace notebookId="notebook-1" workspace={workspace()} activeNoteId="note-1" {...callbacks()} />)
+    await user.click(screen.getByRole('button', { name: 'Region' }))
     const stage = await screen.findByLabelText('PDF page. Drag to capture an image region.')
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Selected PDF text' })).toHaveValue('Fixture PDF text page 1')
-    )
-    const rectangle = {
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      bottom: 100,
-      right: 100,
-      width: 100,
-      height: 100,
-      toJSON: () => ({})
-    }
-    const canvas = stage.querySelector('canvas')!
-    canvas.width = 200
-    vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue(rectangle)
-    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(rectangle)
-    fireEvent.pointerDown(stage, { clientX: 10, clientY: 20, pointerId: 1 })
-    fireEvent.pointerMove(stage, { clientX: 60, clientY: 60, pointerId: 1 })
-    fireEvent.pointerUp(stage, { pointerId: 1 })
-
-    await waitFor(() =>
-      expect(api.sources.captureRegion).toHaveBeenCalledWith({
-        noteId: 'note-1',
-        sourceDocumentId: 'source-1',
-        pdfPage: 1,
-        bounds: { x: 20, y: 40, width: 100, height: 80 },
-        imageDataUrl: 'data:image/png;base64,renderer-test-capture'
-      })
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Attach media' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Attach audio' }))
-    await waitFor(() => expect(api.assets.import).toHaveBeenCalledWith({ notebookId: 'notebook-1', kind: 'audio' }))
-    expect(api.assets.attach).toHaveBeenCalledWith({ noteId: 'note-1', assetId: 'audio-asset', type: 'audio' })
+    fireEvent.pointerDown(stage, { clientX: 10, clientY: 10, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(stage, { clientX: 80, clientY: 70, pointerId: 1 })
+    fireEvent.pointerCancel(stage, { pointerId: 1 })
+    expect(screen.getByRole('button', { name: 'Capture region' })).toBeDisabled()
+    expect(api.sources.captureRegion).not.toHaveBeenCalled()
   })
 
   it('propagates source import errors to the owning workspace', async () => {
@@ -197,34 +194,9 @@ describe('SourceWorkspace core source-capture workflow', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: 'Import' }))
+    await user.click(screen.getByRole('button', { name: 'Import PDF' }))
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Picker unavailable' }))
-    )
-  })
-
-  it('propagates attached-media errors to the owning workspace', async () => {
-    const user = userEvent.setup()
-    const onError = vi.fn()
-    api.sources.list.mockResolvedValue([source()])
-    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
-    api.assets.import.mockRejectedValue(new Error('Media import failed'))
-
-    render(
-      <SourceWorkspace
-        notebookId="notebook-1"
-        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
-        activeNoteId="note-1"
-        onSaved={vi.fn()}
-        onError={onError}
-        onUtilities={vi.fn()}
-      />
-    )
-    await user.click(await screen.findByRole('button', { name: 'Attach media' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Attach image' }))
-
-    await waitFor(() =>
-      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Media import failed' }))
     )
   })
 })
@@ -244,6 +216,8 @@ describe('PDF interaction regression', () => {
       />
     )
     const text = await screen.findByRole('textbox', { name: 'Selected PDF text' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Extract page text' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Extract page text' }))
     await waitFor(() => expect(text).toHaveValue('Fixture PDF text page 1'))
     await user.clear(text)
     await user.type(text, 'Edited evidence')
@@ -271,7 +245,7 @@ describe('PDF interaction regression', () => {
       />
     )
     expect(await screen.findByRole('button', { name: 'Capture text' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Attach media' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Attach media' })).not.toBeInTheDocument()
     expect(screen.getByText('Capture to: Select a note to capture')).toBeVisible()
   })
 })
@@ -305,7 +279,7 @@ describe('source navigation consumption', () => {
     )
     await waitFor(() => expect(screen.getByLabelText('Printed page')).toHaveValue(17))
     api.sources.list.mockResolvedValue([first, second])
-    await user.click(screen.getByRole('button', { name: 'Import' }))
+    await user.click(screen.getByRole('button', { name: 'Import PDF' }))
     await screen.findByRole('option', { name: 'Comparison' })
     await user.selectOptions(screen.getByLabelText('Source document'), 'source-2')
     await waitFor(() => expect(screen.getByLabelText('Source document')).toHaveValue('source-2'))

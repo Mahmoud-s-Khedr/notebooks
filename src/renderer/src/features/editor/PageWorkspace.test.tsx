@@ -196,3 +196,87 @@ describe('note and block commands', () => {
     expect(view.onTrashed).toHaveBeenCalled()
   })
 })
+
+describe('transcript review run switching', () => {
+  const setup = (previousReview?: string) => {
+    const api = installResearchNotebookApi()
+    const audio = block({
+      type: 'audio',
+      data: {
+        assetId: 'asset-1',
+        ...(previousReview === undefined ? {} : { transcriptReviews: { 'run-a': { text: previousReview } } })
+      }
+    })
+    const runs: import('../../../../shared/domain').TranscriptionRun[] = ['a', 'b'].map((id) => ({
+      id: `run-${id}`,
+      assetId: 'asset-1',
+      blockId: audio.id,
+      provider: 'local',
+      model: `model-${id}`,
+      language: null,
+      durationMs: null,
+      status: 'completed',
+      confidence: null,
+      transcriptText: `Original ${id}`,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: audio.createdAt,
+      createdAt: audio.createdAt,
+      updatedAt: audio.updatedAt,
+      segments: []
+    }))
+    api.transcription.list.mockResolvedValue(runs)
+    api.transcription.review.mockImplementation(async ({ runId, text }) =>
+      block({ ...audio, data: { ...audio.data, transcriptReviews: { [runId]: { text } } } })
+    )
+    const view = renderWorkspace({ notes: [{ ...note(), blocks: [audio] }] })
+    return { api, view }
+  }
+
+  it.each([undefined, 'Older correction'])(
+    'retains saved corrections when switching away and back (%s)',
+    async (previous) => {
+      const { api } = setup(previous)
+      const editor = await screen.findByRole('textbox', { name: 'Reviewed transcript' })
+      const selector = screen.getByRole('combobox', { name: 'Transcript run' })
+      await waitFor(() => expect(editor).toHaveValue(previous ?? 'Original a'))
+
+      fireEvent.change(editor, { target: { value: 'Corrected a' } })
+      fireEvent.change(selector, { target: { value: 'run-b' } })
+      await waitFor(() => expect(editor).toHaveValue('Original b'))
+      expect(api.transcription.review).toHaveBeenCalledWith({ runId: 'run-a', text: 'Corrected a' })
+
+      fireEvent.change(editor, { target: { value: 'Corrected b' } })
+      fireEvent.blur(editor)
+      await waitFor(() => expect(api.transcription.review).toHaveBeenCalledTimes(2))
+      fireEvent.change(selector, { target: { value: 'run-a' } })
+      await waitFor(() => expect(editor).toHaveValue('Corrected a'))
+      fireEvent.blur(editor)
+      expect(api.transcription.review).toHaveBeenCalledTimes(2)
+
+      fireEvent.change(editor, { target: { value: 'Corrected a again' } })
+      fireEvent.change(selector, { target: { value: 'run-b' } })
+      await waitFor(() => expect(editor).toHaveValue('Corrected b'))
+      expect(api.transcription.review).toHaveBeenLastCalledWith({ runId: 'run-a', text: 'Corrected a again' })
+      fireEvent.change(selector, { target: { value: 'run-a' } })
+      await waitFor(() => expect(editor).toHaveValue('Corrected a again'))
+    }
+  )
+
+  it('keeps the current run and unsaved corrections when saving fails, then retries', async () => {
+    const { api, view } = setup()
+    const editor = await screen.findByRole('textbox', { name: 'Reviewed transcript' })
+    const selector = screen.getByRole('combobox', { name: 'Transcript run' })
+    await waitFor(() => expect(editor).toHaveValue('Original a'))
+    api.transcription.review.mockRejectedValueOnce(new Error('Save failed'))
+    fireEvent.change(editor, { target: { value: 'Corrected a' } })
+    fireEvent.change(selector, { target: { value: 'run-b' } })
+    await waitFor(() => expect(view.onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Save failed' })))
+    expect(selector).toHaveValue('run-a')
+    expect(editor).toHaveValue('Corrected a')
+    fireEvent.change(selector, { target: { value: 'run-b' } })
+    await waitFor(() => expect(editor).toHaveValue('Original b'))
+    fireEvent.change(selector, { target: { value: 'run-a' } })
+    await waitFor(() => expect(editor).toHaveValue('Corrected a'))
+  })
+})

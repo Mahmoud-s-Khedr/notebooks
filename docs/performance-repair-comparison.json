@@ -1,0 +1,322 @@
+{
+  "platform": "linux",
+  "cpu": "AMD Ryzen 5 PRO 5650U with Radeon Graphics",
+  "budgetPercent": 25,
+  "beforeRevision": "working-tree-reliability-final",
+  "afterRevision": "working-tree-october-repairs",
+  "comparisons": [
+    {
+      "scenario": "large-page",
+      "metric": "workspaceMs",
+      "before": 40.399999998509884,
+      "after": 38.10000000055879,
+      "percent": -5.7,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "searchMs",
+      "before": 11.799999997019768,
+      "after": 9.299999999813735,
+      "percent": -21.2,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "workspaceRenderMs",
+      "before": 2434,
+      "after": 2322,
+      "percent": -4.6,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "scrollFrameP95Ms",
+      "before": 46.400000005960464,
+      "after": 47.90000000037253,
+      "percent": 3.2,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "heapBytes",
+      "before": 372813088,
+      "after": 374720472,
+      "percent": 0.5,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "longTasks",
+      "before": 1,
+      "after": 1,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "longTaskMs",
+      "before": 1398,
+      "after": 1242,
+      "percent": -11.2,
+      "overBudget": false
+    },
+    {
+      "scenario": "large-page",
+      "metric": "ipcCalls",
+      "before": 3,
+      "after": 3,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "workspaceMs",
+      "before": 4.600000001490116,
+      "after": 5.2000000001862645,
+      "percent": 13,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "paginationMs",
+      "before": 4.299999997019768,
+      "after": 5.2000000001862645,
+      "percent": 20.9,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "searchMs",
+      "before": 9.300000004470348,
+      "after": 8.5,
+      "percent": -8.6,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "workspaceRenderMs",
+      "before": 310,
+      "after": 278,
+      "percent": -10.3,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "scrollFrameP95Ms",
+      "before": 20.200000002980232,
+      "after": 20.800000000745058,
+      "percent": 3,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "heapBytes",
+      "before": 661651844,
+      "after": 664034668,
+      "percent": 0.4,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "longTasks",
+      "before": 1,
+      "after": 1,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "longTaskMs",
+      "before": 145,
+      "after": 151,
+      "percent": 4.1,
+      "overBudget": false
+    },
+    {
+      "scenario": "paginated-notes",
+      "metric": "ipcCalls",
+      "before": 4,
+      "after": 4,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "workspaceMs",
+      "before": 3.2999999970197678,
+      "after": 3.2999999998137355,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "paginationMs",
+      "before": 2.5,
+      "after": 3,
+      "percent": 20,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "searchMs",
+      "before": 10.100000001490116,
+      "after": 8.899999999441206,
+      "percent": -11.9,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "workspaceRenderMs",
+      "before": 231,
+      "after": 206,
+      "percent": -10.8,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "scrollFrameP95Ms",
+      "before": 22.700000002980232,
+      "after": 22.90000000037253,
+      "percent": 0.9,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "heapBytes",
+      "before": 719707952,
+      "after": 732212472,
+      "percent": 1.7,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "longTasks",
+      "before": 1,
+      "after": 1,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "longTaskMs",
+      "before": 78,
+      "after": 94,
+      "percent": 20.5,
+      "overBudget": false
+    },
+    {
+      "scenario": "mixed-assets",
+      "metric": "ipcCalls",
+      "before": 50,
+      "after": 50,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "workspaceMs",
+      "before": 14,
+      "after": 15.700000000186265,
+      "percent": 12.1,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "paginationMs",
+      "before": 13.899999998509884,
+      "after": 14.700000000186265,
+      "percent": 5.8,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "searchMs",
+      "before": 11.699999995529652,
+      "after": 9.799999999813735,
+      "percent": -16.2,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "workspaceRenderMs",
+      "before": 996,
+      "after": 1009,
+      "percent": 1.3,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "scrollFrameP95Ms",
+      "before": 22.200000002980232,
+      "after": 21.5,
+      "percent": -3.2,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "heapBytes",
+      "before": 893933908,
+      "after": 910094572,
+      "percent": 1.8,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "longTasks",
+      "before": 1,
+      "after": 1,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "longTaskMs",
+      "before": 521,
+      "after": 525,
+      "percent": 0.8,
+      "overBudget": false
+    },
+    {
+      "scenario": "active-search",
+      "metric": "ipcCalls",
+      "before": 4,
+      "after": 4,
+      "percent": 0,
+      "overBudget": false
+    },
+    {
+      "scenario": "pdf-recording",
+      "metric": "pdfZoomMs",
+      "before": 105,
+      "after": 121,
+      "percent": 15.2,
+      "overBudget": false
+    },
+    {
+      "scenario": "pdf-recording",
+      "metric": "resizeMs",
+      "before": 100,
+      "after": 95,
+      "percent": -5,
+      "overBudget": false
+    },
+    {
+      "scenario": "pdf-recording",
+      "metric": "recordingFrameP95Ms",
+      "before": 18.399999998509884,
+      "after": 18.5,
+      "percent": 0.5,
+      "overBudget": false
+    },
+    {
+      "scenario": "pdf-recording",
+      "metric": "recordingSaveMs",
+      "before": 313,
+      "after": 325,
+      "percent": 3.8,
+      "overBudget": false
+    }
+  ],
+  "regressions": []
+}

@@ -48,6 +48,7 @@ const api: ResearchNotebookApi = {
     thumbnailDataUrl: (input) => ipcRenderer.invoke('assets:thumbnail-data-url', input)
   },
   transcription: {
+    review: (input) => ipcRenderer.invoke('transcription:review', input),
     create: (input) => ipcRenderer.invoke('transcription:create', input),
     get: (input) => ipcRenderer.invoke('transcription:get', input),
     list: (input) => ipcRenderer.invoke('transcription:list', input),
@@ -69,14 +70,19 @@ const api: ResearchNotebookApi = {
     migrationStatus: () => ipcRenderer.invoke('settings:migration:status'),
     removeOldLibrary: () => ipcRenderer.invoke('settings:migration:remove-old')
   },
-  exports: { start: (input) => ipcRenderer.invoke('exports:start', input) },
+  exports: {
+    start: (input) => ipcRenderer.invoke('exports:start', input),
+    openFolder: (input) => ipcRenderer.invoke('exports:open-folder', input)
+  },
   jobs: {
+    get: (input) => ipcRenderer.invoke('jobs:get', input),
     list: () => ipcRenderer.invoke('jobs:list'),
     cancel: (input) => ipcRenderer.invoke('jobs:cancel', input),
     retry: (input) => ipcRenderer.invoke('jobs:retry', input)
   },
   backups: { start: () => ipcRenderer.invoke('backups:start') },
   diagnostics: {
+    cleanup: (input) => ipcRenderer.invoke('diagnostics:cleanup', input),
     list: () => ipcRenderer.invoke('diagnostics:list'),
     listErrors: (input) => ipcRenderer.invoke('diagnostics:list-errors', input),
     getError: (input) => ipcRenderer.invoke('diagnostics:get-error', input),

@@ -59,9 +59,14 @@ export class JobService {
     private readonly concurrency = 2
   ) {
     // A process cannot safely resume a half-written job. Queued jobs are safe to resume.
-    db.prepare(
-      "UPDATE jobs SET status='failed', error_code='INTERRUPTED', error_message='Interrupted by application restart; retry this job.', completed_at=?, updated_at=? WHERE status='running'"
-    ).run(at(), at())
+    db.transaction(() => {
+      db.prepare(
+        "UPDATE jobs SET status='failed', error_code='INTERRUPTED', error_message='Interrupted by application restart; retry this job.', completed_at=?, updated_at=? WHERE status='running'"
+      ).run(at(), at())
+      db.prepare(
+        "UPDATE transcription_runs SET status='failed', error_message='Interrupted by application restart; retry this run.', completed_at=?, updated_at=? WHERE status IN ('queued','running') AND NOT EXISTS (SELECT 1 FROM jobs WHERE kind='transcription' AND status='queued' AND json_extract(payload_json,'$.runId')=transcription_runs.id)"
+      ).run(at(), at())
+    })()
   }
   resume(): void {
     this.pump()
@@ -96,9 +101,19 @@ export class JobService {
   }
   cancel(id: string): Job {
     const current = this.get(id)
-    if (current.status === 'queued')
-      this.db.prepare("UPDATE jobs SET status='cancelled', completed_at=?, updated_at=? WHERE id=?").run(at(), at(), id)
-    else if (current.status === 'running') this.cancelled.add(id)
+    this.db.transaction(() => {
+      if (current.status === 'queued') {
+        this.db
+          .prepare("UPDATE jobs SET status='cancelled', completed_at=?, updated_at=? WHERE id=?")
+          .run(at(), at(), id)
+        if (current.transcriptionRunId)
+          this.db
+            .prepare(
+              "UPDATE transcription_runs SET status='cancelled',completed_at=?,updated_at=? WHERE id=? AND status='queued'"
+            )
+            .run(at(), at(), current.transcriptionRunId)
+      } else if (current.status === 'running') this.cancelled.add(id)
+    })()
     return this.get(id)
   }
   retry(id: string): Job {
@@ -207,6 +222,13 @@ export class JobService {
         this.event(row.kind, 'failed', 'JOB_FAILED', error instanceof Error ? error.message : error, Date.now() - start)
       }
     } finally {
+      const final = this.get(row.id)
+      if (final.transcriptionRunId && ['failed', 'cancelled'].includes(final.status))
+        this.db
+          .prepare(
+            "UPDATE transcription_runs SET status=?,error_message=?,completed_at=?,updated_at=? WHERE id=? AND status IN ('queued','running')"
+          )
+          .run(final.status, final.errorMessage, at(), at(), final.transcriptionRunId)
       this.cancelled.delete(row.id)
     }
   }
@@ -222,10 +244,5 @@ export class JobService {
         'INSERT INTO diagnostic_events (category,outcome,code,message,duration_ms,created_at) VALUES (?,?,?,?,?,?)'
       )
       .run(category, outcome, code, message === null ? null : clean(message), duration, at())
-    this.db
-      .prepare(
-        'DELETE FROM diagnostic_events WHERE id NOT IN (SELECT id FROM diagnostic_events ORDER BY id DESC LIMIT 200)'
-      )
-      .run()
   }
 }

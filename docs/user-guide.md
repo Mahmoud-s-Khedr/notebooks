@@ -1,12 +1,62 @@
 # Research Notebook tester manual
 
-**Build:** 0.1.0 · **Capture date:** 5 October 2026 · **Language:** English · **Platforms tested:** Linux Electron (synthetic microphone); Windows pending
+**Build:** 0.1.0 · **Capture date:** 8 October 2026 · **Language:** English · **Platforms tested:** Linux Electron (synthetic microphone); Windows pending
 
-**Revision:** `ae1dddb4d0ca5367eb0f02a1e9812aa884922d1c` plus reliability working-tree changes · **Built application SHA-256:** `e62c82b4ae01ccde8f2cb873a81fa7a324b811e8642a34ead1e281989924c16b`
+**Revision:** October reliability repairs (working tree). Current checks and limitations are recorded in [repair-workflow-verification.json](repair-workflow-verification.json) and [repair-evidence.md](repair-evidence.md).
 
-This manual describes the controls in the current desktop build. It is for first-time testers, including people without programming experience. Screenshots use isolated demonstration libraries, invented notes, _Think Python, second edition_, and the repository’s one-page PDF fixture. Updated workflows are captured in the versioned reliability directory; previous originals are preserved. Numbered red outlines identify controls; each caption explains the numbers. Figures show real app states, including failures. Retained model-download figures document the earlier verified download session; their surrounding app chrome may predate the reliability pass. Updated model sizes use B, KB, MB and GB.
+The current-control section below illustrates the October repairs. Older numbered figures remain as historical references for unchanged workflows; their source and recorder chrome can predate these repairs. It is for first-time testers, including people without programming experience. Screenshots use isolated demonstration libraries, invented notes, _Think Python, second edition_, and the repository’s one-page PDF fixture. Updated workflows are captured in the versioned reliability directory; previous originals are preserved. Numbered red outlines identify controls; each caption explains the numbers. Figures show real app states, including failures. Retained model-download figures document the earlier verified download session; their surrounding app chrome may predate the reliability pass. Updated model sizes use B, KB, MB and GB.
 
 The [HTML guide](user-guide.html) contains its images and works offline as one file. The [PDF guide](user-guide.pdf) is printable. This Markdown file is the editable source. The [coverage checklist](guide-coverage.md) and [capture/build instructions](guide-maintenance.md) record verification and limitations.
+
+## Current controls: October reliability repairs
+
+### Read and capture
+
+Use the single **Import PDF** button. The source selector remains above a wrapping toolbar with **Text / Region**, page navigation, zoom and **Capture to**. Focus the receiving note first. Select words in Text mode, or use **Extract page text** explicitly; opening a page never pretends the whole page is a selection. Review the editable text before **Capture text** or **Create Q&A**.
+
+![Current Research workspace with consolidated controls and editable extraction.](images/repairs/research-1440.png)
+
+_Figure R1. Current Research view. Page navigation and capture mode share one toolbar; extraction and capture actions remain beside the text editor._
+
+For a screenshot, choose Region, drag in any direction, release, review the rectangle, then select **Capture region**. **Extract region text** limits extraction to the rectangle instead. Pointer cancellation clears an unfinished rectangle. New captures preserve PDF/printed-page provenance and PDF-point coordinates; older pixel rectangles keep their original screenshot and source link.
+
+![Current Research workspace at the minimum window size.](images/repairs/research-960.png)
+
+_Figure R2. Minimum-window controls wrap into groups. The PDF scrolls while extraction and capture controls remain available._
+
+### Notes, recording and transcript review
+
+**Attach media** is in the receiving note's actions, beside **Add block** and **Record audio**, in Write and Research. **Add note** is available in the page header and after the notes/pagination.
+
+Start recording from a note. Its title, Stop, status, microphone meter, saving state and save retry appear together in that note. Focusing another note keeps the original destination. A compact **Jump to recording** indicator appears when the destination scrolls out of view. Changing page/mode, opening a utility or normally closing stops and saves. If saving fails, retry while the retained WAV remains in memory.
+
+![Recording controls beside their destination note.](images/repairs/recording-in-note.png)
+
+_Figure R3. The recording destination remains fixed when another note receives focus. This screenshot uses a synthetic microphone._
+
+Completed runs expose an editable **Reviewed transcript**. Corrections save on blur and through navigation/close boundaries. Use **Original recognition and segments** to inspect the immutable result and play original segments. The run selector separates historical results. Edited text uses no invented timestamps or confidence. Reviewed text is the default in readable exports; lossless JSON retains original text, segments and corrections.
+
+![Transcript review with an editable mixed Arabic and English correction.](images/repairs/transcript-review.png)
+
+_Figure R4. Review text separately from recognition output. The illustrated recognition is a seeded test fixture, not a measured Whisper result._
+
+### Cleanup, exports and recovery
+
+Maintenance has separate cleanup controls for **Finished job history** and **Saved errors and job diagnostics**. The default is older than 30 days. **Preview cleanup** shows the affected count, then **Confirm cleanup** applies it. Active jobs, content, assets, transcription history and export references are preserved. Diagnostics distinguishes notebook-specific missing/corrupt/unreferenced assets from globally untracked files.
+
+![Maintenance with separate history cleanup previews.](images/repairs/maintenance.png)
+
+_Figure R5. Choose a retention age, preview the affected records, then confirm. Display limits are independent of stored history._
+
+An export remains tied to its job through completion. The dialog shows progress, cancellation, failure/retry, and **Open export folder** after success. Cancelling the operating-system folder picker creates no error record. Markdown/AI-context include media, reviewed transcripts, source citations and readable relationship targets. Literal note text is escaped as text. PDF uses tagged A4 output and a short title.
+
+![Completed export with its output-folder action.](images/repairs/export-complete.png)
+
+_Figure R6. Success means the job completed; choosing a destination alone is not success._
+
+If the renderer fails to acknowledge a normal close within 15 seconds or disappears while closing, Electron offers Retry saving, Reload editor, Close with unsaved changes, or Keep open. Closing with unsaved changes requires that explicit choice. Credentials use operating-system secure storage where available; otherwise new keys are session-only. Existing plaintext migration is published only after encryption verifies.
+
+OCR and VAD remain future work. See [extraction and transcription options](extraction-and-transcription-options.md) for alternatives, licensing, packaging and evaluation requirements.
 
 ## 1. Install and launch
 
@@ -152,7 +202,7 @@ _Figure 8. (1) Convert block; (2) Relation type; (3) Block to link; (4) Link; (5
 
 **Before you start:** open a notebook page with a note. PDF import copies the selected file into managed assets for that notebook. Use a PDF without private information for test captures.
 
-1. Select **Research** (Figure 9, 1). Select **Import** (2), the **Import PDF** icon, or **Import PDF** on an empty viewer. Choose a local `.pdf` in the operating system file picker.
+1. Select **Research** (Figure 9, 1). Select the labelled **Import PDF** button. Choose a local `.pdf` in the operating system file picker.
 2. Choose a previously imported PDF in **Source document** (3). Sources belong to the notebook, not just the current page.
 3. Navigate with **Previous page**, **Next page**, or **PDF page** (Figure 10, 1–3). The number is the PDF's physical page, starting at 1. Commit with Enter or by leaving the field. Invalid values are clamped to the displayed total.
 4. Use **Zoom out/Zoom in** (4–5). The initial zoom fits the pane width. Explicit zoom choices stay in effect until a source change; there is no separate reset-to-fit button.
@@ -172,14 +222,14 @@ _Figure 9a. (1) Source document selector; (2) title of the selected second PDF. 
 
 ### Capture text and create Q&A
 
-1. Choose **Text**, select words on the PDF, or edit **Selected PDF text** (Figure 10, 7) down to the passage you need, or type/paste the text yourself. The field is initially populated with extracted text from the whole rendered page.
+1. Choose **Text**, select words on the PDF, or edit **Selected PDF text** (Figure 10, 7) down to the passage you need, or type/paste the text yourself. The field starts empty; use **Extract page text** explicitly when you want a whole-page extraction.
 2. Focus a control inside the note that should receive the passage. Then select **Capture text** (8).
 3. Check the new **source text** block and its **Source document · PDF p. …** link (Figure 11, 1–2). Captured text retains the PDF and physical page reference, plus the optional printed page reference.
 4. For a Q&A instead, enter the question/evidence wording in **Selected PDF text**, then select **Create Q&A** (Figure 10, 9). This creates a **new note** on the current page with a sourced question containing that exact wording and a linked blank answer. Fill the answer (Figure 11, 3–4).
 
 **Expected:** the capture field clears after successful capture. Q&A is a structural convenience; it does not generate an answer or turn a passage into a question using AI.
 
-**Text mode:** normal PDF text selection is available through PDF.js’s text layer. Drag across words, then review the selection in **Selected PDF text**. You can also edit the full extracted page text. Zoom and resize preserve your edits. Use **Region** for rectangle capture. PDFs without selectable text require Region or manual text entry; OCR is unavailable.
+**Text mode:** normal PDF text selection is available through PDF.js’s text layer. Drag across words, then review the selection in **Selected PDF text**. Use **Extract page text** first when you want to edit full-page extraction. Zoom and resize preserve your edits. Use **Region** for rectangle capture. PDFs without selectable text require Region or manual text entry; OCR is unavailable.
 
 ![Focused PDF footer showing page, zoom, printed-page and editable-text controls.](images/guide/11-capture-controls.svg)
 
@@ -191,11 +241,11 @@ _Figure 11. (1) Source text; (2) source/page link; (3) new Q&A question; (4) bla
 
 ### Capture a region and return to its source
 
-1. Focus the receiving note and choose **Region**. On the PDF page (Figure 12, 1), press at the upper-left corner of the desired region, drag down and right, then release. Use a region larger than a few pixels.
-2. Check the newly inserted screenshot block (2). Releasing completes the capture; there is no second “confirm region” button. If the wrong region was captured, move that block to Trash and try again.
+1. Focus the receiving note and choose **Region**. On the PDF page (Figure 12, 1), press at either corner of the desired region, drag in any direction, then release. Use a region larger than a few pixels.
+2. Check the newly inserted screenshot block (2). Releasing completes the selection; select **Capture region** to save it. If the wrong region was captured, move that block to Trash and try again.
 3. While already in **Research**, select **Source document · PDF p. …**, **Actions → View source**, or **Inspector → View source provenance** on sourced material. Check that the correct document and physical page open.
 
-**Expected:** region capture preserves bounds and the physical PDF page reference. Region capture does not store a printed page. **View source** from Write opens Research before applying the destination. Text provenance restores the recorded printed page; check the source and physical page before another capture.
+**Expected:** region capture preserves bounds and the physical PDF page reference. New region captures store the optional printed page and PDF-point bounds; legacy pixel bounds remain unchanged. **View source** from Write opens Research before applying the destination. Text provenance restores the recorded printed page; check the source and physical page before another capture.
 
 ![PDF canvas beside a screenshot block produced by a real rectangular capture.](images/guide/13-region.svg)
 
@@ -217,7 +267,7 @@ _Figure 13. (1) Expand sidebar; (2) pane separator; (3) Write._
 
 **Before you start:** have a note on the current page. For Research attachments, focus the intended receiving note before each import.
 
-1. In **Research**, click the upload icon labeled **Attach media** in the source toolbar. Choose **Attach image**, **Attach screenshot**, **Attach audio**, or **Attach file** (Figure 14, 1–4).
+1. In the receiving note, select **Attach media** beside **Add block**. Choose **Attach image**, **Attach screenshot**, **Attach audio**, or **Attach file** (Figure 14, 1–4).
 2. Choose a local file. The app copies it into managed storage and adds a block to the active note, and shows its receiving note explicitly; controls are disabled if no note is selected. Cancel the picker to leave the note unchanged.
 3. In **Write**, images can also be attached with **Type / for commands → /image** on the desired note.
 4. Check an image/screenshot preview, the audio player, or **Download attached file** on a file block. Click that link to download a copy of an attachment.
@@ -238,7 +288,7 @@ _Figure 14. (1) Attach image; (2) Attach screenshot; (3) Attach audio; (4) Attac
 4. Select **Stop recording**. Wait for the audio block and player to appear. A WAV recording is saved locally.
 5. Use the player's play/pause, seek, and volume controls (Figure 17, 1). Check the recording before attempting transcription.
 
-**Expected:** stopping removes the live indicator and inserts one WAV audio block. Selecting another note, switching page/mode, opening Settings, closing, quitting or restarting stops and saves the recording first. If saving fails, the captured WAV remains in memory, navigation/closure is cancelled, and **Retry save** is available. Fix disk space or permissions and retry; do not force-terminate the process.
+**Expected:** stopping removes the live indicator and inserts one WAV audio block. Selecting another note keeps recording on its original destination. Switching page/mode, opening Settings, closing, quitting or restarting stops and saves it first. If saving fails, the captured WAV remains in memory, navigation/closure is cancelled, and **Retry save** is available. Fix disk space or permissions and retry; do not force-terminate the process.
 
 ![An empty note's Record audio and Add block controls.](images/guide/16-record-ready.svg)
 
@@ -311,7 +361,7 @@ _Figure 20. (1) Missing-runtime explanation; (2) Transcribe remains disabled. No
 2. A configured key changes the controls to **Replace API key / Replace key** and **Remove key**. Replacement clears the visible entry field. Select **Remove key** and confirm to remove it.
 3. Return to the audio block, choose **OpenRouter**, choose a language hint if needed, and select **Transcribe** only when you intend the external upload.
 
-**Expected:** the UI reports whether a key is configured; it does not display the saved secret. This build stores its provider configuration locally. There is no in-app provider pricing page, cloud model selector, or cloud-transcription cancel button. Each audio block explains runtime/model readiness before enabling local transcription. Downloading a model does not install the runtime.
+**Expected:** the UI reports whether a key is configured; it does not display the saved secret. Keys use OS-backed encryption when available. If secure persistence is unavailable, the settings page explains that new keys are session-only. There is no in-app provider pricing page, cloud model selector, or cloud-transcription cancel button. Each audio block explains runtime/model readiness before enabling local transcription. Downloading a model does not install the runtime.
 
 ![OpenRouter selected on a real audio block without a configured credential.](images/guide/24-cloud-unavailable.svg)
 
@@ -367,9 +417,9 @@ _Figure 24. (1) Scope; (2) markdown; (3) pdf; (4) lossless json; (5) ai context.
 | lossless json | `notebook.lossless.v1.json`   | Versioned structured archive with the selected hierarchy, block data/metadata, in-scope relationships, transcription runs/segments, captured-source references and their assets. |
 | ai context    | `notebook.md`                 | Markdown with explicit labels such as `[SOURCE]`, `[COMMENTARY]` and `[AUDIO TRANSCRIPT]`; the app does not send it to an AI service.                                            |
 
-Every export subfolder also contains **manifest.json** and **assets/**. Keep the entire folder, especially for lossless import. Only source PDFs referenced by captured blocks are included; importing a PDF without capturing from it does not guarantee inclusion in an export. Relationships outside the selected scope are excluded. A narrow scope is not a whole-notebook archive.
+Every export subfolder also contains **manifest.json** and **assets/**. Keep the entire folder, especially for lossless import. Only source PDFs referenced by captured blocks are included; importing a PDF without capturing from it does not guarantee inclusion in an export. Lossless relationships outside the selected scope are excluded from the imported graph; readable exports can describe outgoing targets outside the scope. A narrow scope is not a whole-notebook archive.
 
-**Recovery:** cancelling an export picker produces **Export was cancelled.** This is not data loss. A missing/unsafe asset can stop export; inspect diagnostics and the asset scan before retrying. There is no export-progress dialog or automatic opening of the output folder. This session completed all four formats across notebook, page and active-note scopes; see the verification record for the exact combinations.
+**Recovery:** cancelling an export picker returns normally and creates no diagnostic error. This is not data loss. A missing/unsafe asset can stop export; inspect diagnostics and the asset scan before retrying. The export dialog shows progress through completion, with Retry after failure and Open export folder after success. This session completed all four formats across notebook, page and active-note scopes; see the verification record for the exact combinations.
 
 ### Import a lossless archive
 
@@ -475,7 +525,7 @@ _Figure 33. (1) Active relocated library. The original section has disappeared._
 3. Select **Cancel** for a queued/running job. Cancellation can wait for a checkpoint; verify the eventual status.
 4. Fix a failed job's cause, then select **Retry** for a failed/cancelled job. Retry creates another attempt rather than hiding the old row. Confirm the new attempt's status.
 
-**Expected:** local transcription, model downloads, backups and library moves use this job system. Jobs displays up to 100 recent records and refreshes periodically. Cloud transcription and exports do not have the same queued-job UI. Restarting during a running job marks it interrupted/failed, while queued work can resume. Retry interrupted work after checking the previous output.
+**Expected:** local transcription, model downloads, backups and library moves use this job system. Jobs displays up to 100 recent records and refreshes periodically. Exports use persistent jobs and show completion in their own dialog; cloud transcription runs directly. Restarting during a running job marks it interrupted/failed, while queued work can resume. Retry interrupted work after checking the previous output.
 
 ![Jobs dialog showing the actual model-download job history and available Retry control.](images/guide/25-jobs.svg)
 
@@ -534,24 +584,24 @@ _Figure 37. (1) Deleted page entry representing its descendants; (2) Restore; (3
 
 The toolbar's `⌘ K` hint is also visible on Linux/Windows; use **Ctrl + K** there. There is no documented slash-key insertion shortcut or global manual-save shortcut.
 
-| Problem                                              | What to try and what to record                                                                                                                                 |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App will not start                                   | Keep the exact startup/database message, app version and package name. Preserve the library; do not delete the database.                                       |
-| Text or title seems unsaved                          | Leave the field, check the alert, reopen the page. Record whether an error appeared.                                                                           |
-| Capture landed in the wrong note                     | Focus a control inside the intended note before each capture. Workspace reloads clear active selection. Trash the mistaken block after preserving its content. |
-| PDF words cannot be selected                         | Choose Text and select words; use Region for rectangles. Without selectable text, enter evidence manually; OCR is unavailable.                                 |
-| Selected text changes unexpectedly                   | Complete capture before page/zoom changes, which refill extracted text.                                                                                        |
-| Source link opens Research but not the expected page | Click it again once the viewer has mounted, or choose source/page manually. Record both clicks.                                                                |
-| PDF is blank or has no extracted text                | Check rendering errors; try another PDF. Scanned documents may need external OCR.                                                                              |
-| Recording does not start                             | Check microphone permission, connected input and the error alert. Use Record audio or /audio; both use the same recorder.                                      |
-| Recording vanished after navigating                  | Normal navigation and closure save automatically. On failure, stay in the app and use Retry save; forced process termination cannot recover in-memory audio.   |
-| Local transcription reports a missing sidecar        | Obtain a package with its supported Whisper runtime from the maintainer. Downloading a model alone is insufficient.                                            |
-| Model download fails or stalls                       | Check network, disk space and jobs. Cancel, then retry after fixing the cause. Do not claim Installed until it appears.                                        |
-| Cloud transcription fails                            | Check key configuration and service error; consider network/provider limits. Avoid repeated paid requests without understanding the failure.                   |
-| Import completed but no notebook appears             | The tree refreshes immediately. Check the import error and verify notebook.lossless.v1.json and its assets.                                                    |
-| Export or backup fails                               | Check destination permissions, disk space, asset scan and diagnostics. Do not use a partial folder as a verified backup.                                       |
-| Library path did not change after Move library       | Wait for verified-copy status, select Restart now, then check Active library.                                                                                  |
-| Restore fails                                        | Restore the deleted parent first; inspect diagnostics if it still fails.                                                                                       |
+| Problem                                              | What to try and what to record                                                                                                                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App will not start                                   | Keep the exact startup/database message, app version and package name. Preserve the library; do not delete the database.                                                                          |
+| Text or title seems unsaved                          | Leave the field, check the alert, reopen the page. Record whether an error appeared.                                                                                                              |
+| Capture landed in the wrong note                     | Focus a control inside the intended note before each capture. Workspace reloads preserve active selection when the note remains available. Trash the mistaken block after preserving its content. |
+| PDF words cannot be selected                         | Choose Text and select words; use Region for rectangles. Without selectable text, enter evidence manually; OCR is unavailable.                                                                    |
+| Selected text changes unexpectedly                   | Page changes clear drafts; zoom preserves edited text. Extract page text replaces the field only when explicitly selected.                                                                        |
+| Source link opens Research but not the expected page | Click it again once the viewer has mounted, or choose source/page manually. Record both clicks.                                                                                                   |
+| PDF is blank or has no extracted text                | Check rendering errors; try another PDF. Scanned documents may need external OCR.                                                                                                                 |
+| Recording does not start                             | Check microphone permission, connected input and the error alert. Use Record audio or /audio; both use the same recorder.                                                                         |
+| Recording vanished after navigating                  | Normal navigation and closure save automatically. On failure, stay in the app and use Retry save; forced process termination cannot recover in-memory audio.                                      |
+| Local transcription reports a missing sidecar        | Obtain a package with its supported Whisper runtime from the maintainer. Downloading a model alone is insufficient.                                                                               |
+| Model download fails or stalls                       | Check network, disk space and jobs. Cancel, then retry after fixing the cause. Do not claim Installed until it appears.                                                                           |
+| Cloud transcription fails                            | Check key configuration and service error; consider network/provider limits. Avoid repeated paid requests without understanding the failure.                                                      |
+| Import completed but no notebook appears             | The tree refreshes immediately. Check the import error and verify notebook.lossless.v1.json and its assets.                                                                                       |
+| Export or backup fails                               | Check destination permissions, disk space, asset scan and diagnostics. Do not use a partial folder as a verified backup.                                                                          |
+| Library path did not change after Move library       | Wait for verified-copy status, select Restart now, then check Active library.                                                                                                                     |
+| Restore fails                                        | Restore the deleted parent first; inspect diagnostics if it still fails.                                                                                                                          |
 
 ## 12. Guided first session
 
@@ -562,7 +612,7 @@ The toolbar's `⌘ K` hint is also visible on Linux/Windows; use **Ctrl + K** th
 3. Use **Add answer** on the question and fill the answer. Open its Inspector to confirm **responds to** (Figures 6 and 8).
 4. Duplicate a block, reorder it using a menu and **Alt + ↑/↓**, then move the duplicate to Trash and restore it (Figures 6–8 and 36).
 5. Create **Practice captures**, add a note, choose **Research**, and import your PDF (Figures 2 and 9).
-6. Navigate to a readable page, edit the extracted field down to a passage, focus your note and select **Capture text**. Create a separate Q&A note and capture a small region (Figures 10–12).
+6. Navigate to a readable page, select words or use Extract page text, then edit down to a passage, focus your note and select **Capture text**. Create a separate Q&A note and capture a small region (Figures 10–12).
 7. Click the source link while already in Research and confirm the correct PDF/page. Resize the divider and toggle the sidebar (Figures 11–13).
 8. Attach an image and a file. If permitted, record a short clip and stop it before navigating. Listen back (Figures 14–17).
 9. Inspect transcription setup. Try Local Whisper only when its runtime/model are available. Record an unavailable prerequisite as **blocked**, not as a successful transcript (Figures 18–21).

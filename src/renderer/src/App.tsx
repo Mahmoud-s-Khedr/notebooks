@@ -166,7 +166,7 @@ export function App(): ReactElement {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'n' && workspace) {
         event.preventDefault()
         void saves
-          .flush()
+          .flushEditors()
           .then(() => window.researchNotebook.notes.create({ pageId: workspace.id, title: 'Untitled note' }))
           .then((note) => reloadWorkspace(note.id))
           .catch((error: unknown) => setError(errorMessage(error)))
@@ -298,10 +298,13 @@ export function App(): ReactElement {
       activeNoteId={activeNoteId}
       setActiveNoteId={(id) => {
         if (id !== activeNoteId)
-          transition(() => {
-            activeNoteRef.current = id
-            setActiveNoteId(id)
-          })
+          void saves
+            .flushEditors()
+            .then(() => {
+              activeNoteRef.current = id
+              setActiveNoteId(id)
+            })
+            .catch(handleError)
       }}
       onError={handleError}
       onChanged={refreshTree}
@@ -577,6 +580,7 @@ function NotebookSidebar({
       <div className="sidebar-search">
         <Search size={16} />
         <input
+          dir="auto"
           aria-label="Filter notebook and page titles"
           placeholder="Filter notebooks and pages…"
           value={filter}
@@ -594,6 +598,7 @@ function NotebookSidebar({
             <div className="tree-title">
               <FolderPlus size={14} />
               <input
+                dir="auto"
                 aria-label="Notebook title"
                 defaultValue={notebook.title}
                 onBlur={(event) => {
@@ -624,11 +629,12 @@ function NotebookSidebar({
                 aria-current={page.id === selectedPageId ? 'page' : undefined}
                 onClick={() => void onOpenPage(page.id).catch(onError)}
               >
-                {page.title}
+                <bdi>{page.title}</bdi>
               </button>
             ))}
             <div className="new-page">
               <input
+                dir="auto"
                 aria-label={`New page for ${notebook.title}`}
                 value={newPage}
                 onChange={(event) => setNewPage(event.target.value)}
@@ -678,6 +684,7 @@ function CommandPalette({
         <div className="palette-input">
           <Search size={18} />
           <Input
+            dir="auto"
             ref={inputRef}
             value={query}
             onChange={(event) => {
@@ -691,9 +698,11 @@ function CommandPalette({
           <div className="search-results">
             {results.map((result) => (
               <button key={`${result.entityType}-${result.entityId}`} onClick={() => void onSelect(result)}>
-                <strong>{result.title}</strong>
+                <strong>
+                  <bdi>{result.title}</bdi>
+                </strong>
                 <small>
-                  {result.entityType} · {result.excerpt || 'Match'}
+                  {result.entityType} · <bdi>{result.excerpt || 'Match'}</bdi>
                 </small>
               </button>
             ))}
@@ -767,6 +776,7 @@ function SettingsPage({
 }): ReactElement {
   const [section, setSection] = useState<'general' | 'transcription' | 'storage' | 'maintenance'>('general')
   const [preferences, setPreferences] = useState<AppPreferences>({ theme: 'system', density: 'default' })
+  const [credentialPersistence, setCredentialPersistence] = useState(false)
   const [configured, setConfigured] = useState(false)
   const [key, setKey] = useState('')
   const [models, setModels] = useState<WhisperModel[]>([])
@@ -785,6 +795,7 @@ function SettingsPage({
         window.researchNotebook.settings.models()
       ])
       setConfigured(transcription.openRouterConfigured)
+      setCredentialPersistence(Boolean(transcription.credentialPersistenceAvailable))
       setSelectedModel(transcription.selectedLocalModel?.id ?? null)
       setModels(modelList)
     } else if (section === 'storage') setStorage(await window.researchNotebook.settings.storage({ refresh: true }))
@@ -819,7 +830,7 @@ function SettingsPage({
     try {
       const report = await window.researchNotebook.assets.diagnostics({ notebookId })
       setMaintenance(
-        `${report.missing.length} missing · ${report.orphaned.length} unreferenced · ${report.untrackedFiles.length} untracked`
+        `${report.missing.length} missing · ${report.orphaned.length} unreferenced · ${report.hashMismatched.length} corrupt · ${report.untrackedFiles.length} globally untracked`
       )
     } catch (error) {
       onError(error)
@@ -895,6 +906,7 @@ function SettingsPage({
                 <label className="field-label">
                   {configured ? 'Replace API key' : 'API key'}
                   <Input
+                    dir="auto"
                     type="password"
                     value={key}
                     onChange={(event) => setKey(event.target.value)}
@@ -921,6 +933,11 @@ function SettingsPage({
                   )}
                 </div>
               </div>
+              <p className="dialog-copy">
+                {credentialPersistence
+                  ? 'Credentials are encrypted with operating-system secure storage.'
+                  : 'Secure storage is unavailable. New credentials are kept for this session only.'}
+              </p>
               <h3 className="settings-subheading">Local Whisper models</h3>
               <p className="dialog-copy">Choose one installed model as the default for new local transcriptions.</p>
               <div className="model-list">
@@ -1066,6 +1083,8 @@ function SettingsPage({
               <p className="dialog-copy">
                 Backups, integrity checks, diagnostics, and background-job history stay local to this library.
               </p>
+              <HistoryCleanup kind="jobs" onCleaned={load} onError={onError} />
+              <HistoryCleanup kind="diagnostics" onCleaned={load} onError={onError} />
               {maintenance && <p className="diagnostic-result">{maintenance}</p>}
               <div className="dialog-actions">
                 <Button
@@ -1230,6 +1249,7 @@ function DiagnosticsDialog({
   return (
     <Modal title="Diagnostics" open onOpenChange={onOpenChange}>
       <p className="dialog-copy">Local error records include full debugging detail and are never sent anywhere.</p>
+      <HistoryCleanup kind="diagnostics" onCleaned={load} onError={onError} />
       {result && <p className="diagnostic-result">{result}</p>}
       <div className="dialog-actions">
         <Button
@@ -1240,7 +1260,7 @@ function DiagnosticsDialog({
               if (!notebookId) return
               const report = await window.researchNotebook.assets.diagnostics({ notebookId })
               setResult(
-                `${report.missing.length} missing · ${report.orphaned.length} unreferenced · ${report.untrackedFiles.length} untracked`
+                `${report.missing.length} missing · ${report.orphaned.length} unreferenced · ${report.hashMismatched.length} corrupt · ${report.untrackedFiles.length} globally untracked`
               )
             })().catch(onError)
           }
@@ -1285,6 +1305,7 @@ function DiagnosticsDialog({
           ))}
         </select>
         <Input
+          dir="auto"
           aria-label="Filter errors by category"
           value={category}
           onChange={(event) => setCategory(event.target.value)}
@@ -1324,11 +1345,34 @@ function ExportDialog({
   onOpenChange: (open: boolean) => void
   onError: (error: unknown) => void
 }): ReactElement {
+  const [job, setJob] = useState<Job | null>(null)
+  const [choosing, setChoosing] = useState(false)
+  const [message, setMessage] = useState('')
+  useEffect(() => {
+    if (!job || !['queued', 'running'].includes(job.status)) return
+    let alive = true
+    const timer = window.setInterval(() => {
+      void window.researchNotebook.jobs
+        .get({ jobId: job.id })
+        .then((next) => {
+          if (alive) setJob(next)
+        })
+        .catch((error) => {
+          if (alive) onError(error)
+        })
+    }, 500)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+    }
+  }, [job, onError])
   const [scope, setScope] = useState<'notebook' | 'page' | 'note'>('page')
   const start = async (format: 'markdown' | 'lossless-json' | 'ai-context' | 'pdf') => {
     if (!notebookId) return
+    setChoosing(true)
+    setMessage('')
     try {
-      await window.researchNotebook.exports.start({
+      const next = await window.researchNotebook.exports.start({
         scope:
           scope === 'note' && activeNoteId
             ? { type: 'note', noteId: activeNoteId }
@@ -1337,9 +1381,12 @@ function ExportDialog({
               : { type: 'notebook', notebookId },
         format
       })
-      onOpenChange(false)
+      setJob(next)
+      if (!next) setMessage('Export cancelled.')
     } catch (error) {
       onError(error)
+    } finally {
+      setChoosing(false)
     }
   }
   return (
@@ -1356,9 +1403,55 @@ function ExportDialog({
           </option>
         </select>
       </label>
+      {choosing && <p role="status">Choose an export folder…</p>}
+      {message && <p role="status">{message}</p>}
+      {job && (
+        <section className="export-progress" aria-label="Export progress">
+          <p role="status">
+            {job.status === 'completed'
+              ? 'Export complete'
+              : job.status === 'failed'
+                ? 'Export failed'
+                : job.status === 'cancelled'
+                  ? 'Export cancelled'
+                  : `Exporting · ${job.progress}%`}
+          </p>
+          {['queued', 'running'].includes(job.status) && (
+            <>
+              <progress max="100" value={job.progress} />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void window.researchNotebook.jobs.cancel({ jobId: job.id }).then(setJob).catch(onError)}
+              >
+                Cancel export
+              </Button>
+            </>
+          )}
+          {job.errorMessage && <p role="alert">{job.errorMessage}</p>}
+          {['failed', 'cancelled'].includes(job.status) && (
+            <Button
+              variant="secondary"
+              onClick={() => void window.researchNotebook.jobs.retry({ jobId: job.id }).then(setJob).catch(onError)}
+            >
+              Retry export
+            </Button>
+          )}
+          {job.status === 'completed' && (
+            <Button onClick={() => void window.researchNotebook.exports.openFolder({ jobId: job.id }).catch(onError)}>
+              Open export folder
+            </Button>
+          )}
+        </section>
+      )}
       <div className="export-options">
         {(['markdown', 'pdf', 'lossless-json', 'ai-context'] as const).map((format) => (
-          <Button key={format} variant="secondary" disabled={!notebookId} onClick={() => void start(format)}>
+          <Button
+            key={format}
+            variant="secondary"
+            disabled={!notebookId || choosing || Boolean(job && ['queued', 'running'].includes(job.status))}
+            onClick={() => void start(format)}
+          >
             {format.replace('-', ' ')}
           </Button>
         ))}
@@ -1459,5 +1552,82 @@ function Empty({ onNewNotebook }: { onNewNotebook: () => Promise<void> }): React
       <p>Create a notebook, then add pages, notes, and blocks.</p>
       <Button onClick={() => void onNewNotebook()}>Create notebook</Button>
     </div>
+  )
+}
+
+function HistoryCleanup({
+  kind,
+  onCleaned,
+  onError
+}: {
+  kind: 'jobs' | 'diagnostics'
+  onCleaned: () => Promise<void>
+  onError: (error: unknown) => void
+}): ReactElement {
+  const [days, setDays] = useState(30)
+  const [count, setCount] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState('')
+  const preview = async () => {
+    setBusy(true)
+    try {
+      setCount(await window.researchNotebook.diagnostics.cleanup({ kind, days }))
+    } catch (error) {
+      onError(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const apply = async () => {
+    setBusy(true)
+    try {
+      const removed = await window.researchNotebook.diagnostics.cleanup({ kind, days, apply: true })
+      setCount(null)
+      setResult(`Removed ${removed} ${kind === 'jobs' ? 'finished jobs' : 'saved diagnostic records'}.`)
+      await onCleaned()
+    } catch (error) {
+      onError(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="history-cleanup">
+      <strong>{kind === 'jobs' ? 'Finished job history' : 'Saved errors and job diagnostics'}</strong>
+      <label>
+        Older than{' '}
+        <input
+          dir="auto"
+          aria-label={`${kind} retention days`}
+          type="number"
+          min="1"
+          max="36500"
+          value={days}
+          onChange={(event) => {
+            setDays(Math.max(1, Math.min(36500, Number(event.target.value) || 30)))
+            setCount(null)
+          }}
+        />{' '}
+        days
+      </label>
+      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void preview()}>
+        Preview cleanup
+      </Button>
+      {result && <p role="status">{result}</p>}
+      {count !== null && (
+        <div role="alert">
+          <p>
+            {count} records will be removed. Active jobs, notes, assets, transcripts, and export references are
+            preserved.
+          </p>
+          <Button variant="danger" size="sm" disabled={busy || count === 0} onClick={() => void apply()}>
+            Confirm cleanup
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setCount(null)}>
+            Keep history
+          </Button>
+        </div>
+      )}
+    </section>
   )
 }

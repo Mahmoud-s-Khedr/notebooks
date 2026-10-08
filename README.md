@@ -21,6 +21,20 @@ Read the illustrated [Markdown manual](docs/user-guide.md), open the self-contai
 
 The [coverage checklist](docs/guide-coverage.md) records exercised workflows and remaining checks. [Capture and build instructions](docs/guide-maintenance.md) explain how to update the screenshots and regenerate both shareable formats.
 
+## October reliability repairs
+
+Media exports, scoped v1 imports, complete graph duplication and source captures
+now have regression coverage. Source navigation/capture controls are consolidated;
+recording stays with its original note across focus changes; transcripts have a
+separate review editor. Maintenance exposes age-based cleanup previews, and
+exports report job completion. IPC validates the owning window and main frame.
+Model downloads stream to disk, and new provider credentials use OS-backed
+encryption or session-only storage.
+
+See [repair evidence](docs/repair-evidence.md) and [extraction/transcription options](docs/extraction-and-transcription-options.md).
+OCR and VAD are documented future work. Native Windows, physical microphones and
+packaged sidecars require the platform checks recorded in the evidence file.
+
 ## Technical assessment and direction
 
 ### Architecture

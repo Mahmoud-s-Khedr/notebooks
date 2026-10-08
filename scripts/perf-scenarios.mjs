@@ -2,6 +2,7 @@
 import { _electron } from './guide/node_modules/playwright-core/index.mjs'
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { tmpdir, cpus } from 'node:os'
 import { join, resolve } from 'node:path'
 const root = resolve('.')
@@ -67,31 +68,56 @@ try {
   for (const scenario of scenarios) {
     console.log('Preparing', scenario.name)
     let existing = false
-    const ids = await page.evaluate(async (s) => {
-      const api = window.researchNotebook
-      const prior = (await api.notebooks.list()).find((n) => n.title === s.name)
-      if (prior) {
-        let ws = await api.pages.getWorkspace({ pageId: prior.pages[0].id })
-        const notes = ws.notes.map((n) => n.id)
-        while (ws.nextCursor) {
-          ws = await api.pages.getWorkspace({ pageId: ws.id, cursor: ws.nextCursor })
-          notes.push(...ws.notes.map((n) => n.id))
+    const ids = await page.evaluate(
+      async (s) => {
+        const api = window.researchNotebook
+        const prior = (await api.notebooks.list()).find((n) => n.title === s.name)
+        if (prior) {
+          let ws = await api.pages.getWorkspace({ pageId: prior.pages[0].id })
+          const notes = ws.notes.map((n) => n.id)
+          while (ws.nextCursor) {
+            ws = await api.pages.getWorkspace({ pageId: ws.id, cursor: ws.nextCursor })
+            notes.push(...ws.notes.map((n) => n.id))
+          }
+          if (notes.length !== s.notes) throw Error('Unexpected retained fixture size')
+          return { pageId: ws.id, notebookId: prior.id, notes, existing: true }
         }
-        if (notes.length !== s.notes) throw Error('Unexpected retained fixture size')
-        return { pageId: ws.id, notebookId: prior.id, notes, existing: true }
-      }
-      const n = await api.notebooks.create({ title: s.name })
-      const p = await api.pages.create({ notebookId: n.id, title: s.name })
-      const notes = []
-      for (let i = 0; i < s.notes; i++) {
-        const note = await api.notes.create({ pageId: p.id, title: `Fixture ${i}` })
-        notes.push(note.id)
-        for (let j = 0; j < s.blocks; j++)
-          await api.blocks.create({ noteId: note.id, type: 'text', data: { text: `Evidence fixture ${i} ${j}` } })
-      }
-      return { pageId: p.id, notebookId: n.id, notes }
-    }, scenario)
+        const n = await api.notebooks.create({ title: s.name })
+        const p = await api.pages.create({ notebookId: n.id, title: s.name })
+        const notes = []
+        for (let i = 0; i < s.notes; i++) {
+          const note = await api.notes.create({ pageId: p.id, title: `Fixture ${i}` })
+          notes.push(note.id)
+          for (let j = 0; !s.bulkSeed && j < s.blocks; j++)
+            await api.blocks.create({ noteId: note.id, type: 'text', data: { text: `Evidence fixture ${i} ${j}` } })
+        }
+        return { pageId: p.id, notebookId: n.id, notes }
+      },
+      { ...scenario, bulkSeed: process.env.PERF_BULK_SEED === '1' }
+    )
     existing = Boolean(ids.existing)
+    if (process.env.PERF_BULK_SEED === '1' && !existing) {
+      // Fixture construction is outside measured samples. Avoid rebuilding the
+      // full search index after each of thousands of seed inserts.
+      const seed = join(isolated, 'seed.cjs')
+      await writeFile(
+        seed,
+        `const Database = require(${JSON.stringify(join(root, 'node_modules/better-sqlite3'))});
+const db = new Database(${JSON.stringify(join(userData, 'database.sqlite'))});
+const notes = ${JSON.stringify(ids.notes)}, count = ${scenario.blocks};
+const insert = db.prepare('INSERT INTO blocks (id,note_id,type,position,data_json,metadata_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)');
+const time = new Date().toISOString();
+db.transaction(() => { notes.forEach((id, i) => { for (let j=0; j<count; j++) insert.run(require('node:crypto').randomUUID(),id,'text',j,JSON.stringify({text: 'Evidence fixture '+i+' '+j}),'{}',time,time); }); })();
+db.close();`
+      )
+      execFileSync(join(root, 'node_modules/electron/dist/electron'), [seed], {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+      })
+      await page.evaluate(({ notebookId, title }) => window.researchNotebook.notebooks.update({ notebookId, title }), {
+        notebookId: ids.notebookId,
+        title: scenario.name
+      })
+    }
     if (scenario.name === 'mixed-assets' && !existing)
       for (let i = 0; i < 150; i++) {
         const kind = i % 3 === 0 ? 'image' : i % 3 === 1 ? 'audio' : 'file'
@@ -245,6 +271,10 @@ try {
     cpu: cpus()[0].model,
     revision: process.env.PERF_REVISION || 'working-tree',
     runs: 5,
+    fixturePreparation:
+      process.env.PERF_BULK_SEED === '1'
+        ? 'bulk SQLite blocks; public API notes/assets; index refreshed before samples'
+        : 'public API',
     pdfStartingZoomPercent,
     results,
     limitations: [

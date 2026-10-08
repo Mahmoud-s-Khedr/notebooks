@@ -16,9 +16,14 @@ export class PdfRenderer {
     try {
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       await window.loadURL(
-        `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>@page{margin:16mm}body{font:14px system-ui;color:#171717}h1{font-size:24px}h2{font-size:19px;break-after:avoid}h3{font-size:16px;break-after:avoid}section{break-inside:avoid}img{max-width:100%;max-height:600px} .label{color:#555;font-size:12px}</style></head><body>${markup}</body></html>`)}`
+        `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}p,h1,h2,h3{unicode-bidi:plaintext;text-align:start}body{font:14px system-ui;color:#171717}h1{font-size:24px}h2{font-size:19px;break-after:avoid}h3{font-size:16px;break-after:avoid}section{break-inside:avoid}img{max-width:100%;max-height:600px} .label{color:#555;font-size:12px}</style></head><body>${markup}</body></html>`)}`
       )
-      return await window.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true })
+      return await window.webContents.printToPDF({
+        printBackground: true,
+        preferCSSPageSize: true,
+        pageSize: 'A4',
+        generateTaggedPDF: true
+      })
     } finally {
       if (!window.isDestroyed()) window.destroy()
     }

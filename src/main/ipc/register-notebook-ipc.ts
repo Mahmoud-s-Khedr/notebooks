@@ -1,4 +1,4 @@
-import { dialog, ipcMain } from 'electron'
+import { dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { blockTypes, relationTypes, textBlockTypes } from '../../shared/domain'
@@ -22,7 +22,8 @@ const boundsSchema = z
     x: z.number().finite(),
     y: z.number().finite(),
     width: z.number().positive(),
-    height: z.number().positive()
+    height: z.number().positive(),
+    coordinateSpace: z.literal('pdf-points-bottom-left').optional()
   })
   .strict()
 const transcriptionProviderSchema = z.enum(['local', 'openrouter'])
@@ -95,10 +96,16 @@ function endpoint<Schema extends z.ZodType>(
   return { channel, schema, dialog: dialogMetadata, handler: handler as (input: unknown) => unknown }
 }
 
-function registerIpc(errors: ErrorLogService, endpoint: NotebookIpcEndpoint): void {
-  ipcMain.handle(endpoint.channel, async (_event, input: unknown) => {
+function registerIpc(
+  errors: ErrorLogService,
+  endpoint: NotebookIpcEndpoint,
+  trusted: (event: IpcMainInvokeEvent) => boolean
+): void {
+  ipcMain.handle(endpoint.channel, async (event, input: unknown) => {
     const ipcId = randomUUID()
     try {
+      if (!trusted(event) || event.senderFrame !== event.sender.mainFrame)
+        throw new Error('Untrusted IPC sender or frame.')
       return await endpoint.handler(endpoint.schema.parse(input))
     } catch (error) {
       errors.record(error, {
@@ -334,10 +341,29 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
         properties: ['openDirectory', 'createDirectory'],
         title: 'Choose export folder'
       })
-      if (picked.canceled || !picked.filePaths[0]) throw new Error('Export was cancelled.')
+      if (picked.canceled || !picked.filePaths[0]) return null
       return service.startExport(input.scope, input.format, picked.filePaths[0])
     },
-    { selection: 'directory', cancellation: 'throw' }
+    { selection: 'directory', cancellation: 'return-null' }
+  )
+  register('jobs:get', z.object({ jobId: idSchema }).strict(), (input) => service.getJob(input.jobId))
+  register('exports:open-folder', z.object({ jobId: idSchema }).strict(), async (input) => {
+    const error = await shell.openPath(service.exportDirectory(input.jobId))
+    if (error) throw new Error('The export folder could not be opened.')
+  })
+  register(
+    'diagnostics:cleanup',
+    z
+      .object({
+        kind: z.enum(['jobs', 'diagnostics']),
+        days: z.number().int().min(1).max(36500).optional(),
+        apply: z.boolean().optional()
+      })
+      .strict(),
+    (input) => service.historyCleanup(input.kind, input.days, input.apply)
+  )
+  register('transcription:review', z.object({ runId: idSchema, text: z.string().max(200000) }).strict(), (input) =>
+    service.reviewTranscript(input.runId, input.text)
   )
   register('jobs:list', z.undefined(), () => service.listJobs())
   register('jobs:cancel', z.object({ jobId: idSchema }).strict(), (input) => service.cancelJob(input.jobId))
@@ -350,10 +376,10 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
         properties: ['openDirectory', 'createDirectory'],
         title: 'Choose backup folder'
       })
-      if (picked.canceled || !picked.filePaths[0]) throw new Error('Backup was cancelled.')
+      if (picked.canceled || !picked.filePaths[0]) return null
       return service.startBackup(picked.filePaths[0])
     },
-    { selection: 'directory', cancellation: 'throw' }
+    { selection: 'directory', cancellation: 'return-null' }
   )
   register('diagnostics:list', z.undefined(), () => service.diagnostics())
   register('diagnostics:list-errors', errorFilterSchema.optional(), (input) => service.listErrors(input))
@@ -427,12 +453,20 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
         noteId: idSchema,
         sourceDocumentId: idSchema,
         pdfPage: pageNumber,
+        printedPage: pageNumber.optional(),
         bounds: boundsSchema,
         imageDataUrl: z.string().max(25_000_000)
       })
       .strict(),
     (input) =>
-      service.captureSourceRegion(input.noteId, input.sourceDocumentId, input.pdfPage, input.bounds, input.imageDataUrl)
+      service.captureSourceRegion(
+        input.noteId,
+        input.sourceDocumentId,
+        input.pdfPage,
+        input.bounds,
+        input.imageDataUrl,
+        input.printedPage
+      )
   )
   register(
     'sources:create-qa-note',
@@ -451,6 +485,10 @@ export function notebookIpcEndpoints(service: NotebookService): readonly Noteboo
   return endpoints
 }
 
-export function registerNotebookIpc(service: NotebookService, errors: ErrorLogService): void {
-  for (const endpoint of notebookIpcEndpoints(service)) registerIpc(errors, endpoint)
+export function registerNotebookIpc(
+  service: NotebookService,
+  errors: ErrorLogService,
+  trusted: (event: IpcMainInvokeEvent) => boolean
+): void {
+  for (const endpoint of notebookIpcEndpoints(service)) registerIpc(errors, endpoint, trusted)
 }

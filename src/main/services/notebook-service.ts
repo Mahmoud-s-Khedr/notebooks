@@ -41,7 +41,8 @@ import {
   TranscriptionService,
   OpenRouterProvider,
   WhisperCppProvider,
-  WhisperModelManager
+  WhisperModelManager,
+  type CredentialStorage
 } from './transcription-service'
 import { ExportService, validateLosslessArchive } from './export-service'
 import { JobService } from './job-service'
@@ -270,7 +271,8 @@ export class NotebookService {
     configDirectory = join(tmpdir(), 'research-notebook-config'),
     localWhisper?: { binaryPath: string | null; modelPath: string | null },
     library?: { root: string; bootstrapPath: string; previousRoot?: string | null },
-    errors?: ErrorLogService
+    errors?: ErrorLogService,
+    credentialStorage?: CredentialStorage
   ) {
     this.db = database.connection
     this.databasePath = database.path
@@ -281,7 +283,7 @@ export class NotebookService {
     if (library?.previousRoot) this.migration = { state: 'active', destination: library.previousRoot, error: null }
     for (const folder of ['images', 'screenshots', 'audio', 'files'])
       mkdirSync(join(this.assetsDirectory, folder), { recursive: true })
-    this.transcriptionConfig = new TranscriptionConfig(configDirectory)
+    this.transcriptionConfig = new TranscriptionConfig(configDirectory, credentialStorage)
     this.whisperModels = new WhisperModelManager(
       join(configDirectory, 'whisper-models'),
       localWhisper?.binaryPath ?? null
@@ -303,6 +305,7 @@ export class NotebookService {
         const descriptor = WhisperModelManager.catalog.find((model) => model.id === selected)!
         return {
           openRouterConfigured: Boolean(this.transcriptionConfig.getKey()),
+          credentialPersistenceAvailable: this.transcriptionConfig.persistenceAvailable(),
           localModels: this.whisperModels
             .list()
             .filter((model) => model.installed)
@@ -343,26 +346,30 @@ export class NotebookService {
     this.jobs.register('pdf', async (payload, progress, cancelled) => {
       progress(5)
       if (cancelled()) throw new Error('Cancelled')
-      const markup = this.exports.printableDocument(payload.scope as ExportScope)
-      progress(30)
-      if (cancelled()) throw new Error('Cancelled')
-      const bytes = await this.pdfRenderer.print(markup)
-      progress(80)
-      if (cancelled()) throw new Error('Cancelled')
-      const result = this.exports.start(payload.scope as ExportScope, 'pdf', String(payload.destination), bytes)
-      if (cancelled()) {
-        rmSync(result.directory, { recursive: true, force: true })
-        throw new Error('Cancelled')
+      const snapshot = this.exports.snapshot(payload.scope as ExportScope)
+      const staging = join(tmpdir(), `notebook-export-${randomUUID()}`)
+      try {
+        const exporter = this.exports.stageSnapshot(snapshot, staging)
+        const markup = exporter.printableDocument(payload.scope as ExportScope, snapshot)
+        progress(30)
+        const bytes = await this.pdfRenderer.print(markup)
+        progress(80)
+        if (cancelled()) throw new Error('Cancelled')
+        const result = exporter.start(payload.scope as ExportScope, 'pdf', String(payload.destination), bytes, snapshot)
+        progress(100)
+        return result as unknown as Record<string, unknown>
+      } finally {
+        rmSync(staging, { recursive: true, force: true })
       }
-      progress(100)
-      return result as unknown as Record<string, unknown>
     })
     this.jobs.register('asset-integrity', async (payload, progress, cancelled) => {
       const assets = this.listAssets(String(payload.notebookId))
       const bad: string[] = []
+      const missing: string[] = []
       assets.forEach((asset, index) => {
         if (cancelled()) throw new Error('Cancelled')
         const path = this.absoluteAssetPath(asset.relativePath)
+        if (!existsSync(path)) missing.push(asset.id)
         if (
           existsSync(path) &&
           asset.sha256 &&
@@ -371,7 +378,7 @@ export class NotebookService {
           bad.push(asset.id)
         progress(((index + 1) / Math.max(assets.length, 1)) * 100)
       })
-      return { hashMismatchedAssetIds: bad }
+      return { missingAssetIds: missing, hashMismatchedAssetIds: bad, clean: !missing.length && !bad.length }
     })
     this.jobs.register('thumbnail', async (payload, progress, cancelled) => {
       progress(10)
@@ -529,11 +536,25 @@ export class NotebookService {
     const blocksForNote = this.db.prepare(
       'SELECT * FROM blocks WHERE note_id = ? AND deleted_at IS NULL ORDER BY position'
     )
+    const noteIds = visibleNotes.map((note) => note.id)
+    const provenance = noteIds.length
+      ? (this.db
+          .prepare(
+            `SELECT s.* FROM block_sources s JOIN blocks b ON b.id=s.block_id WHERE b.note_id IN (${noteIds.map(() => '?').join(',')}) ORDER BY s.created_at`
+          )
+          .all(...noteIds) as SourceBlockRow[])
+      : []
+    const sourceByBlock = new Map<string, BlockSource>()
+    for (const row of provenance)
+      if (!sourceByBlock.has(row.block_id)) sourceByBlock.set(row.block_id, asBlockSource(row))
     return {
       ...asPage(page),
       notes: visibleNotes.map((note) => ({
         ...asNote(note),
-        blocks: (blocksForNote.all(note.id) as BlockRow[]).map(asBlock)
+        blocks: (blocksForNote.all(note.id) as BlockRow[]).map((row) => ({
+          ...asBlock(row),
+          source: sourceByBlock.get(row.id) ?? null
+        }))
       })),
       nextCursor: hasMore ? String(visibleNotes.at(-1)?.position) : null
     }
@@ -607,11 +628,90 @@ export class NotebookService {
       const blocks = this.db
         .prepare('SELECT * FROM blocks WHERE note_id = ? AND deleted_at IS NULL ORDER BY position')
         .all(noteId) as BlockRow[]
-      this.duplicateBlockGraph(blocks, copy.id, 0, createdAt)
+      this.cloneBlocks(blocks, copy.id, createdAt)
       this.touchNoteNotebook(copy.id, createdAt)
       this.refreshSearchIndex()
       return asNote(copy)
     })()
+  }
+
+  private cloneBlocks(originals: BlockRow[], noteId: string, timestamp: string, offset = 0): BlockRow[] {
+    const blockIds = new Map(originals.map((b) => [b.id, randomUUID()]))
+    const runIds = new Map<string, string>()
+    const insert = (table: string, row: Record<string, unknown>) => {
+      const keys = Object.keys(row)
+      this.db
+        .prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`)
+        .run(...keys.map((k) => row[k]))
+    }
+    const runs = originals.flatMap(
+      (b) => this.db.prepare('SELECT * FROM transcription_runs WHERE block_id=?').all(b.id) as Record<string, unknown>[]
+    )
+    runs.forEach((r) => runIds.set(String(r.id), randomUUID()))
+    const remap = (value: unknown): unknown => {
+      if (typeof value === 'string') return blockIds.get(value) ?? runIds.get(value) ?? value
+      if (Array.isArray(value)) return value.map(remap)
+      if (value && typeof value === 'object')
+        return Object.fromEntries(
+          Object.entries(value)
+            .filter(([k]) => k !== 'recordingOperationId')
+            .map(([k, v]) => [runIds.get(k) ?? k, remap(v)])
+        )
+      return value
+    }
+    const copies = originals.map((b, position) => {
+      const copy = {
+        ...b,
+        id: blockIds.get(b.id)!,
+        note_id: noteId,
+        position: position + offset,
+        data_json: JSON.stringify(remap(JSON.parse(b.data_json))),
+        metadata_json: JSON.stringify(remap(JSON.parse(b.metadata_json))),
+        created_at: timestamp,
+        updated_at: timestamp
+      }
+      insert('blocks', copy)
+      return copy
+    })
+    for (const b of originals) {
+      for (const ref of this.db.prepare('SELECT * FROM asset_references WHERE block_id=?').all(b.id) as Record<
+        string,
+        unknown
+      >[])
+        insert('asset_references', { ...ref, block_id: blockIds.get(b.id), created_at: timestamp })
+      for (const source of this.db.prepare('SELECT * FROM block_sources WHERE block_id=?').all(b.id) as Record<
+        string,
+        unknown
+      >[])
+        insert('block_sources', { ...source, id: randomUUID(), block_id: blockIds.get(b.id), created_at: timestamp })
+      for (const relation of this.db.prepare('SELECT * FROM block_relations WHERE from_block_id=?').all(b.id) as Record<
+        string,
+        unknown
+      >[])
+        insert('block_relations', {
+          ...relation,
+          id: randomUUID(),
+          from_block_id: blockIds.get(b.id),
+          to_block_id: blockIds.get(String(relation.to_block_id)) ?? relation.to_block_id,
+          created_at: timestamp
+        })
+    }
+    for (const run of runs) {
+      const active = ['queued', 'running'].includes(String(run.status))
+      insert('transcription_runs', {
+        ...run,
+        id: runIds.get(String(run.id)),
+        block_id: blockIds.get(String(run.block_id)),
+        status: active ? 'cancelled' : run.status,
+        completed_at: active ? timestamp : run.completed_at,
+        updated_at: timestamp
+      })
+      for (const segment of this.db
+        .prepare('SELECT * FROM transcription_segments WHERE run_id=?')
+        .all(run.id) as Record<string, unknown>[])
+        insert('transcription_segments', { ...segment, id: randomUUID(), run_id: runIds.get(String(run.id)) })
+    }
+    return copies
   }
 
   createBlock(noteId: string, type: BlockType, data: Record<string, unknown> = {}): Block {
@@ -678,90 +778,16 @@ export class NotebookService {
     return this.db.transaction(() => {
       const original = this.activeRow('block', blockId) as BlockRow
       const createdAt = now()
-      const [copy] = this.duplicateBlockGraph(
+      const copy = this.cloneBlocks(
         [original],
         original.note_id,
-        this.nextPosition('blocks', 'note_id', original.note_id),
-        createdAt
-      )
+        createdAt,
+        this.nextPosition('blocks', 'note_id', original.note_id)
+      )[0]
       this.touchNoteNotebook(copy.note_id, createdAt)
       this.refreshSearchIndex()
       return asBlock(copy)
     })()
-  }
-
-  /** Called inside the owning duplication transaction; files and source documents stay shared. */
-  private duplicateBlockGraph(originals: BlockRow[], noteId: string, position: number, createdAt: string): BlockRow[] {
-    const blockIds = new Map(originals.map((block) => [block.id, randomUUID()]))
-    const insert = (table: string, row: Record<string, unknown>) => {
-      const columns = Object.keys(row)
-      this.db
-        .prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`)
-        .run(...Object.values(row))
-    }
-    const copies = originals.map((block, index): BlockRow => ({
-      ...block,
-      id: blockIds.get(block.id)!,
-      note_id: noteId,
-      position: position + index,
-      created_at: createdAt,
-      updated_at: createdAt,
-      deleted_at: null,
-      deletion_operation_id: null
-    }))
-    copies.forEach((copy) => insert('blocks', copy))
-    originals.forEach((original, index) => {
-      const copy = copies[index]
-      const rows = (table: string, key: string, id: string) =>
-        this.db.prepare(`SELECT * FROM ${table} WHERE ${key} = ?`).all(id) as Array<Record<string, unknown>>
-      rows('asset_references', 'block_id', original.id).forEach((row) =>
-        insert('asset_references', { ...row, block_id: copy.id, created_at: createdAt })
-      )
-      rows('block_sources', 'block_id', original.id).forEach((row) =>
-        insert('block_sources', { ...row, id: randomUUID(), block_id: copy.id, created_at: createdAt })
-      )
-      const runIds = new Map<string, string>()
-      rows('transcription_runs', 'block_id', original.id).forEach((row) => {
-        const id = randomUUID()
-        runIds.set(String(row.id), id)
-        const pending = row.status === 'queued' || row.status === 'running'
-        insert('transcription_runs', {
-          ...row,
-          id,
-          block_id: copy.id,
-          created_at: createdAt,
-          updated_at: createdAt,
-          ...(pending
-            ? {
-                status: 'failed',
-                error_message: 'Transcription was pending when duplicated; retry to transcribe this copy.',
-                completed_at: createdAt
-              }
-            : {})
-        })
-        rows('transcription_segments', 'run_id', String(row.id)).forEach((segment) =>
-          insert('transcription_segments', { ...segment, id: randomUUID(), run_id: id })
-        )
-      })
-      const data = JSON.parse(copy.data_json) as Record<string, unknown>
-      if (typeof data.activeTranscriptionRunId === 'string') {
-        data.activeTranscriptionRunId = runIds.get(data.activeTranscriptionRunId) ?? null
-        copy.data_json = JSON.stringify(data)
-        this.db.prepare('UPDATE blocks SET data_json = ? WHERE id = ?').run(copy.data_json, copy.id)
-      }
-      rows('block_relations', 'from_block_id', original.id).forEach((row) => {
-        const target = blockIds.get(String(row.to_block_id))
-        if (target)
-          insert('block_relations', {
-            ...row,
-            id: randomUUID(),
-            from_block_id: copy.id,
-            to_block_id: target,
-            created_at: createdAt
-          })
-      })
-    })
-    return copies
   }
 
   reorderBlocks(noteId: string, blockIds: string[]): void {
@@ -1076,6 +1102,51 @@ export class NotebookService {
     this.assertWritable()
     return this.jobs.start(format === 'pdf' ? 'pdf' : 'export', { scope, format, destination })
   }
+  getJob(jobId: string): Job {
+    return this.jobs.get(jobId)
+  }
+  exportDirectory(jobId: string): string {
+    const job = this.jobs.get(jobId)
+    if (
+      !['export', 'pdf'].includes(job.kind) ||
+      job.status !== 'completed' ||
+      typeof job.result?.directory !== 'string'
+    )
+      throw new Error('This export has no completed output folder.')
+    return job.result.directory
+  }
+  historyCleanup(kind: 'jobs' | 'diagnostics', days = 30, apply = false): number {
+    if (apply) this.assertWritable()
+    const before = new Date(Date.now() - days * 86400000).toISOString()
+    return this.db.transaction(() => {
+      const targets =
+        kind === 'jobs'
+          ? [['jobs', "status IN ('completed','failed','cancelled') AND completed_at < ?"]]
+          : [
+              ['error_events', 'created_at < ?'],
+              ['diagnostic_events', 'created_at < ?']
+            ]
+      let count = 0
+      for (const [table, where] of targets) {
+        count += (
+          this.db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`).get(before) as { count: number }
+        ).count
+        if (apply) this.db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(before)
+      }
+      return count
+    })()
+  }
+  reviewTranscript(runId: string, text: string): Block {
+    this.assertWritable()
+    const run = this.transcription.get(runId)
+    if (run.status !== 'completed') throw new Error('Only completed transcripts can be reviewed.')
+    const block = asBlock(this.activeRow('block', run.blockId) as BlockRow)
+    const reviews = block.data.transcriptReviews as Record<string, unknown> | undefined
+    return this.updateBlock(block.id, {
+      ...block.data,
+      transcriptReviews: { ...reviews, [runId]: { text, reviewedAt: now() } }
+    })
+  }
   listJobs() {
     return this.jobs.list()
   }
@@ -1091,6 +1162,18 @@ export class NotebookService {
   retryJob(jobId: string) {
     this.assertWritable()
     const prior = this.jobs.get(jobId)
+    if (prior.kind === 'transcription') {
+      if (!['failed', 'cancelled'].includes(prior.status))
+        throw new Error('Only failed or cancelled jobs can be retried.')
+      const previous = this.transcription.get(prior.transcriptionRunId!)
+      const run = this.transcription.create(
+        previous.blockId,
+        previous.provider,
+        previous.model,
+        previous.language ?? undefined
+      )
+      return this.jobs.start('transcription', { runId: run.id, retryOf: jobId })
+    }
     if (prior.kind === 'library-move') {
       if (!['failed', 'cancelled'].includes(prior.status))
         throw new Error('Only failed or cancelled jobs can be retried.')
@@ -1230,7 +1313,10 @@ export class NotebookService {
                 : key === 'activeTranscriptionRunId'
                   ? 'runs'
                   : null
-          return [key, table && typeof item === 'string' ? lookup(table, item) : remap(item)]
+          return [
+            maps.get('runs')?.get(key) ?? key,
+            table && typeof item === 'string' ? lookup(table, item) : remap(item)
+          ]
         })
       )
     }
@@ -1268,6 +1354,21 @@ export class NotebookService {
       )
         throw new Error('The archive has invalid ordering.')
     }
+    for (const [key, parent] of [
+      ['pages', 'notebook_id'],
+      ['notes', 'page_id'],
+      ['blocks', 'note_id'],
+      ['segments', 'run_id']
+    ]) {
+      const groups = new Map<string, any[]>()
+      for (const row of archive[key]) groups.set(row[parent], [...(groups.get(row[parent]) ?? []), row])
+      for (const rows of groups.values())
+        rows
+          .sort((a, b) => a.position - b.position)
+          .forEach((row, position) => {
+            row.position = position
+          })
+    }
     try {
       mkdirSync(stagingDirectory, { recursive: true })
       for (const asset of archive.assets) {
@@ -1280,7 +1381,8 @@ export class NotebookService {
         )
           throw new Error('The archive contains an unsafe asset path.')
         const source = resolve(root, asset.exportPath)
-        if (!directoryContains(root, source) || !existsSync(source)) throw new Error('An archive asset is missing.')
+        if (!directoryContains(physicalPath(root), physicalPath(source)) || !existsSync(source))
+          throw new Error('An archive asset is missing.')
         const expected = typeof asset.sha256 === 'string' ? asset.sha256 : null
         const bytes = readFileSync(source)
         if (!expected || createHash('sha256').update(bytes).digest('hex') !== expected)
@@ -1438,7 +1540,7 @@ export class NotebookService {
             row.model,
             row.language ?? null,
             row.duration_ms ?? null,
-            row.status,
+            ['queued', 'running'].includes(row.status) ? 'cancelled' : row.status,
             row.confidence ?? null,
             row.transcript_text ?? null,
             row.error_message ?? null,
@@ -1516,7 +1618,11 @@ export class NotebookService {
   }
   diagnoseAssets(notebookId: string): AssetDiagnostics {
     const assets = this.listAssets(notebookId)
-    const known = new Set(assets.map(({ relativePath }) => relativePath))
+    const known = new Set(
+      (this.db.prepare('SELECT relative_path FROM assets').all() as { relative_path: string }[]).map(
+        (a) => a.relative_path
+      )
+    )
     const files = ['images', 'screenshots', 'audio', 'files'].flatMap((folder) => {
       const directory = join(this.assetsDirectory, folder)
       return existsSync(directory)
@@ -1533,10 +1639,17 @@ export class NotebookService {
             this.db.prepare('SELECT COUNT(*) AS count FROM asset_references WHERE asset_id = ?').get(asset.id) as {
               count: number
             }
-          ).count === 0 && !this.db.prepare('SELECT 1 FROM source_documents WHERE asset_id = ?').get(asset.id)
+          ).count === 0 &&
+          !this.db.prepare('SELECT 1 FROM source_documents WHERE asset_id = ?').get(asset.id) &&
+          !this.db.prepare('SELECT 1 FROM export_asset_references WHERE asset_id = ?').get(asset.id)
       ),
       untrackedFiles: files.filter((file) => !known.has(file)),
-      hashMismatched: [],
+      hashMismatched: assets.filter((a) => {
+        const path = this.absoluteAssetPath(a.relativePath)
+        return (
+          existsSync(path) && a.sha256 && createHash('sha256').update(readFileSync(path)).digest('hex') !== a.sha256
+        )
+      }),
       scanJobId: null
     }
   }
@@ -1756,22 +1869,25 @@ export class NotebookService {
   ): Block {
     this.assertWritable()
     if (!text.trim()) throw new Error('Select or enter text to capture.')
-    const source = this.requireSourceForNote(noteId, sourceDocumentId)
-    const block = this.createBlock(noteId, 'source_text', {
-      text,
-      sourceDocumentId: source.id,
-      pdfPage,
-      printedPage: printedPage ?? null
-    })
-    this.insertBlockSource(block.id, sourceDocumentId, 'text', pdfPage, printedPage, null, text)
-    return block
+    return this.db.transaction(() => {
+      const source = this.requireSourceForNote(noteId, sourceDocumentId)
+      const block = this.createBlock(noteId, 'source_text', {
+        text,
+        sourceDocumentId: source.id,
+        pdfPage,
+        printedPage: printedPage ?? null
+      })
+      this.insertBlockSource(block.id, sourceDocumentId, 'text', pdfPage, printedPage, null, text)
+      return block
+    })()
   }
   captureSourceRegion(
     noteId: string,
     sourceDocumentId: string,
     pdfPage: number,
     bounds: { x: number; y: number; width: number; height: number },
-    imageDataUrl: string
+    imageDataUrl: string,
+    printedPage?: number
   ): Block {
     this.assertWritable()
     this.requireSourceForNote(noteId, sourceDocumentId)
@@ -1791,16 +1907,23 @@ export class NotebookService {
       match[2],
       match[1] === 'image/png' ? '.png' : match[1] === 'image/jpeg' ? '.jpg' : '.webp'
     )
-    const asset = this.insertWrittenAsset(
-      source.notebook_id,
-      'screenshot',
-      imagePath,
-      `PDF page ${pdfPage} region`,
-      match[1]
-    )
-    const block = this.attachAsset(noteId, asset.id, 'screenshot')
-    this.insertBlockSource(block.id, sourceDocumentId, 'region', pdfPage, undefined, bounds, null)
-    return block
+    try {
+      return this.db.transaction(() => {
+        const asset = this.insertWrittenAsset(
+          source.notebook_id,
+          'screenshot',
+          imagePath,
+          `PDF page ${pdfPage} region`,
+          match[1]
+        )
+        const block = this.attachAsset(noteId, asset.id, 'screenshot')
+        this.insertBlockSource(block.id, sourceDocumentId, 'region', pdfPage, printedPage, bounds, null)
+        return block
+      })()
+    } catch (error) {
+      rmSync(this.absoluteAssetPath(imagePath), { force: true })
+      throw error
+    }
   }
   createQaNote(
     pageId: string,
@@ -1810,18 +1933,20 @@ export class NotebookService {
     text: string
   ): Note {
     this.assertWritable()
-    const note = this.createNote(pageId, 'Q&A from source selection')
-    const source = this.requireSourceForNote(note.id, sourceDocumentId)
-    const question = this.createBlock(note.id, 'question', {
-      text,
-      sourceDocumentId: source.id,
-      pdfPage,
-      printedPage: printedPage ?? null
-    })
-    this.insertBlockSource(question.id, sourceDocumentId, 'text', pdfPage, printedPage, null, text)
-    const answer = this.createBlock(note.id, 'answer', { text: '' })
-    this.createRelation(answer.id, question.id, 'responds_to')
-    return note
+    return this.db.transaction(() => {
+      const note = this.createNote(pageId, 'Q&A from source selection')
+      const source = this.requireSourceForNote(note.id, sourceDocumentId)
+      const question = this.createBlock(note.id, 'question', {
+        text,
+        sourceDocumentId: source.id,
+        pdfPage,
+        printedPage: printedPage ?? null
+      })
+      this.insertBlockSource(question.id, sourceDocumentId, 'text', pdfPage, printedPage, null, text)
+      const answer = this.createBlock(note.id, 'answer', { text: '' })
+      this.createRelation(answer.id, question.id, 'responds_to')
+      return note
+    })()
   }
 
   moveToTrash(entityType: TrashEntityType, id: string): TrashRecord {
@@ -2113,7 +2238,8 @@ export class NotebookService {
   }
   private absoluteAssetPath(relativePath: string): string {
     const path = resolve(this.assetsDirectory, relativePath.replace(/^assets\//, ''))
-    if (!path.startsWith(`${this.assetsDirectory}/`)) throw new Error('Invalid managed asset path.')
+    if (path === this.assetsDirectory || !directoryContains(physicalPath(this.assetsDirectory), physicalPath(path)))
+      throw new Error('Invalid managed asset path.')
     return path
   }
   private mimeType(extension: string): string {

@@ -4,6 +4,9 @@ import { NotebookDatabase } from '../database/database'
 import { ErrorLogService } from '../services/error-log-service'
 import { NotebookService } from '../services/notebook-service'
 
+const frame = {}
+const sender = { mainFrame: frame }
+
 const state = vi.hoisted(() => ({ handlers: new Map<string, (event: unknown, input: unknown) => Promise<unknown>>() }))
 
 vi.mock('electron', () => ({
@@ -27,18 +30,19 @@ describe('registered notebook IPC diagnostics', () => {
     database = new NotebookDatabase(':memory:')
     errors = new ErrorLogService(database.connection, '/tmp/unused-ipc-errors.ndjson', 'test', true)
     service = new NotebookService(database, undefined, undefined, undefined, undefined, errors)
-    registerNotebookIpc(service, errors)
+    registerNotebookIpc(service, errors, (event) => event.sender === sender)
   })
   afterEach(() => database.close())
 
   const invoke = (channel: string, input: unknown) =>
-    state.handlers.get(channel)?.({}, input) ?? Promise.reject(new Error(`Missing ${channel} handler`))
+    state.handlers.get(channel)?.({ sender, senderFrame: frame }, input) ??
+    Promise.reject(new Error(`Missing ${channel} handler`))
 
   it('registers every endpoint in the inventory', () => {
     const endpoints = notebookIpcEndpoints(service)
     expect(state.handlers.size).toBe(endpoints.length)
     expect([...state.handlers.keys()]).toEqual(endpoints.map((endpoint) => endpoint.channel))
-    expect(endpoints).toHaveLength(67)
+    expect(endpoints).toHaveLength(71)
   })
 
   it.each(['null', 'malformed', 'unknown field'] as const)(
@@ -203,4 +207,22 @@ describe('registered notebook IPC diagnostics', () => {
     ).rejects.toThrow('safe limits')
     expect(errors.list({ category: 'diagnostics:report-error' })[0].code).toBe('IPC_HANDLER_FAILED')
   })
+})
+
+it('rejects foreign senders and subframes before payload handling', async () => {
+  const database = new NotebookDatabase(':memory:')
+  try {
+    const errors = new ErrorLogService(database.connection, '/tmp/unused-ipc-errors.ndjson', 'test', true)
+    const service = new NotebookService(database)
+    registerNotebookIpc(service, errors, (event) => event.sender === sender)
+    const create = vi.spyOn(service, 'createNotebook')
+    const handler = state.handlers.get('notebooks:create')!
+    await expect(handler({ sender: { mainFrame: frame }, senderFrame: frame }, { title: 'Foreign' })).rejects.toThrow(
+      'Untrusted'
+    )
+    await expect(handler({ sender, senderFrame: {} }, { title: 'Subframe' })).rejects.toThrow('Untrusted')
+    expect(create).not.toHaveBeenCalled()
+  } finally {
+    database.close()
+  }
 })

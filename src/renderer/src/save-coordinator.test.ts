@@ -32,3 +32,16 @@ describe('application save boundary', () => {
     expect(stop).toHaveBeenCalledTimes(2)
   })
 })
+
+it('flushes note focus changes without stopping a recording', async () => {
+  const saves = new SaveCoordinator()
+  const editor = vi.fn().mockResolvedValue(undefined)
+  const stop = vi.fn().mockResolvedValue(undefined)
+  saves.editors.set('dirty', editor)
+  saves.setRecorder({ start: vi.fn(), stop })
+  await saves.flushEditors()
+  expect(editor).toHaveBeenCalledOnce()
+  expect(stop).not.toHaveBeenCalled()
+  await saves.flush()
+  expect(stop).toHaveBeenCalledOnce()
+})

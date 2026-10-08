@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { delimiter, dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import type Database from 'better-sqlite3'
@@ -161,35 +162,54 @@ export class WhisperModelManager {
     if (existsSync(this.path(modelId))) return
     this.status.set(modelId, { state: 'downloading', progress: 0, error: null })
     const temporary = `${this.path(modelId)}.${randomUUID()}.tmp`
+    const controller = new AbortController()
+    const timer = setInterval(() => {
+      if (cancelled()) controller.abort()
+    }, 75)
+    let file: Awaited<ReturnType<typeof open>> | undefined
     try {
+      if (cancelled()) throw new Error('Cancelled')
       const response = await this.fetcher(
-        `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/${model.id}`
+        `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/${model.id}`,
+        { signal: controller.signal }
       )
       if (!response.ok || !response.body) throw new Error('The multilingual Whisper model could not be downloaded.')
-      const length = Number(response.headers.get('content-length') ?? 0)
       const reader = response.body.getReader()
-      const chunks: Uint8Array[] = []
+      const hash = createHash('sha256')
+      file = await open(temporary, 'wx', 0o600)
       let received = 0
-      for (;;) {
-        if (cancelled()) throw new Error('Cancelled')
-        const next = await reader.read()
-        if (next.done) break
-        chunks.push(next.value)
-        received += next.value.byteLength
-        const value = length ? received / length : null
-        this.status.set(modelId, { state: 'downloading', progress: value, error: null })
-        progress(value === null ? 0 : value * 100)
+      try {
+        for (;;) {
+          if (cancelled()) throw new Error('Cancelled')
+          const next = await reader.read()
+          if (next.done) break
+          hash.update(next.value)
+          let offset = 0
+          while (offset < next.value.byteLength) {
+            const written = await file.write(next.value, offset, next.value.byteLength - offset)
+            offset += written.bytesWritten
+          }
+          received += next.value.byteLength
+          const value = received / model.sizeBytes
+          this.status.set(modelId, { state: 'downloading', progress: value, error: null })
+          progress(Math.min(99, value * 100))
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined)
+        reader.releaseLock()
       }
-      const bytes = Buffer.concat(chunks)
-      const hash = createHash('sha256').update(bytes).digest('hex')
-      if (hash !== model.sha256) throw new Error('The downloaded Whisper model failed its integrity check.')
-      writeFileSync(temporary, bytes, { mode: 0o600 })
+      await file.close()
+      file = undefined
+      if (hash.digest('hex') !== model.sha256)
+        throw new Error('The downloaded Whisper model failed its integrity check.')
       if (cancelled()) throw new Error('Cancelled')
       renameSync(temporary, this.path(modelId))
       this.status.set(modelId, { state: 'ready', progress: 1, error: null })
       progress(100)
     } catch (error) {
-      const message = safeError(error)
+      await file?.close()
+      file = undefined
+      const message = cancelled() ? 'Cancelled' : safeError(error)
       rmSync(temporary, { force: true })
       this.status.set(modelId, {
         state: message === 'Cancelled' ? 'idle' : 'failed',
@@ -197,6 +217,11 @@ export class WhisperModelManager {
         error: message === 'Cancelled' ? null : message
       })
       throw new Error(message)
+    } finally {
+      clearInterval(timer)
+      controller.abort()
+      await file?.close()
+      rmSync(temporary, { force: true })
     }
   }
   remove(modelId: string): void {
@@ -315,25 +340,33 @@ export class WhisperCppProvider implements TranscriptionProvider {
           }
         })
         let terminated = false
+        let exited = false
+        let escalation: ReturnType<typeof setTimeout> | undefined
         const timer = setInterval(() => {
           if (!input.cancelled?.() || !child || terminated) return
           terminated = true
           child.kill('SIGTERM')
-          setTimeout(() => {
-            if (child && !child.killed) child.kill('SIGKILL')
-          }, 2000).unref()
+          escalation = setTimeout(() => {
+            if (!exited) child?.kill('SIGKILL')
+          }, 2000)
+          escalation.unref()
         }, 75)
         child.once('error', (error) => {
+          exited = true
           clearInterval(timer)
+          clearTimeout(escalation)
           rejectRun(error)
         })
         child.once('close', (code, signal) => {
+          exited = true
           clearInterval(timer)
+          clearTimeout(escalation)
           if (input.cancelled?.()) rejectRun(new Error('Cancelled'))
           else if (code === 0) resolveRun()
           else rejectRun(new Error(formatWhisperFailure(stderr, code, signal)))
         })
       })
+      return this.readOutput(output)
     } catch (error) {
       rmSync(output, { force: true })
       rmSync(output.replace(/\.txt$/, '.json'), { force: true })
@@ -345,7 +378,12 @@ export class WhisperCppProvider implements TranscriptionProvider {
           ? `Local Whisper could not transcribe this recording: ${detail}`
           : 'Local Whisper could not transcribe this recording. Check that the WAV is supported and try again.'
       )
+    } finally {
+      rmSync(output, { force: true })
+      rmSync(output.replace(/\.txt$/, '.json'), { force: true })
     }
+  }
+  private readOutput(output: string): NormalizedTranscript {
     const text = readFileSync(output, 'utf8').trim()
     const jsonPath = output.replace(/\.txt$/, '.json')
     let segments: NormalizedTranscript['segments'] = []
@@ -542,14 +580,28 @@ export class TranscriptionService {
   }
 }
 
+export interface CredentialStorage {
+  isEncryptionAvailable(): boolean
+  encryptString(value: string): Buffer
+  decryptString(value: Buffer): string
+}
+
 export class TranscriptionConfig {
+  private sessionKey: string | null = null
+  persistenceAvailable(): boolean {
+    return Boolean(this.secure?.isEncryptionAvailable())
+  }
   private readonly path: string
-  constructor(directory: string) {
+  constructor(
+    directory: string,
+    private readonly secure?: CredentialStorage
+  ) {
     mkdirSync(directory, { recursive: true })
     this.path = join(directory, 'transcription.json')
   }
   private read(): {
     openRouterKey?: string
+    encryptedOpenRouterKey?: string
     selectedLocalModel?: string
     theme?: 'light' | 'dark' | 'system'
     density?: 'default' | 'compact'
@@ -571,16 +623,45 @@ export class TranscriptionConfig {
     }
   }
   getKey(): string | null {
-    const key = this.read().openRouterKey
-    return typeof key === 'string' && key ? key : null
+    if (this.sessionKey) return this.sessionKey
+    const value = this.read()
+    if (value.encryptedOpenRouterKey && this.persistenceAvailable()) {
+      try {
+        return this.secure!.decryptString(Buffer.from(value.encryptedOpenRouterKey, 'base64'))
+      } catch {
+        return null
+      }
+    }
+    if (typeof value.openRouterKey === 'string' && value.openRouterKey) {
+      if (this.persistenceAvailable()) this.setKey(value.openRouterKey)
+      else this.sessionKey = value.openRouterKey
+      return this.sessionKey ?? this.getKey()
+    }
+    return null
   }
   setKey(key: string): void {
-    this.write({ ...this.read(), openRouterKey: key.trim() })
+    const value = this.read()
+    if (!this.persistenceAvailable()) {
+      this.sessionKey = key.trim()
+      delete value.openRouterKey
+      delete value.encryptedOpenRouterKey
+      this.write(value)
+      return
+    }
+    // Encrypt and verify first; atomic replacement then removes the plaintext.
+    const encrypted = this.secure!.encryptString(key.trim())
+    if (this.secure!.decryptString(encrypted) !== key.trim()) throw new Error('Credential encryption did not verify.')
+    delete value.openRouterKey
+    value.encryptedOpenRouterKey = encrypted.toString('base64')
+    this.write(value)
+    this.sessionKey = null
   }
   removeKey(): void {
     const value = this.read()
     delete value.openRouterKey
+    delete value.encryptedOpenRouterKey
     this.write(value)
+    this.sessionKey = null
   }
   selectedModel(): string {
     const selected = this.read().selectedLocalModel

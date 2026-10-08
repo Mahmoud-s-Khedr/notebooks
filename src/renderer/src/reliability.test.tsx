@@ -27,7 +27,7 @@ describe('navigation and controls regressions', () => {
     expect(screen.getAllByLabelText('Note title')).toHaveLength(2)
     await user.click(screen.getAllByLabelText('Note title')[1])
     await waitFor(() => expect(document.querySelector('[data-item-id="second"]')).toHaveClass('focused-note'))
-    await user.click(screen.getByRole('button', { name: 'Add note' }))
+    await user.click(screen.getAllByRole('button', { name: 'Add note' }).at(-1)!)
     await waitFor(() => expect(api.pages.getWorkspace).toHaveBeenCalledWith({ pageId: 'page-1', cursor: '49' }))
     expect(screen.getAllByLabelText('Note title')).toHaveLength(2)
     expect(document.querySelector('[data-item-id="second"]')).toHaveClass('focused-note')

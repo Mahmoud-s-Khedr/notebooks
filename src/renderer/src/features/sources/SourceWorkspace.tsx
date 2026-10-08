@@ -1,15 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactElement } from 'react'
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  Maximize2,
-  Minus,
-  MoreHorizontal,
-  Plus,
-  Scissors,
-  Upload
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Maximize2, Minus, Plus, Scissors, Upload } from 'lucide-react'
 import * as pdfjs from 'pdfjs-dist'
 import './pdf-text-layer.css'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -20,8 +10,10 @@ import openJpegNoWasmFallbackUrl from 'pdfjs-dist/wasm/openjpeg_nowasm_fallback.
 import qcmsWasmUrl from 'pdfjs-dist/wasm/qcms_bg.wasm?url'
 import quickJsLoaderUrl from 'pdfjs-dist/wasm/quickjs-eval.js?url'
 import quickJsWasmUrl from 'pdfjs-dist/wasm/quickjs-eval.wasm?url'
-import type { BlockSource, AssetKind, PageWorkspace, SourceDocument } from '../../../../shared/domain'
-import { Button, DropdownMenu } from '../../components/ui'
+import type { BlockSource, PageWorkspace, SourceDocument } from '../../../../shared/domain'
+import { Button } from '../../components/ui'
+
+import { reconstructText, normalizedRectangle } from './pdf-text'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -52,7 +44,7 @@ type Props = {
   onError: (error: unknown) => void
   onUtilities: (kind: 'settings' | 'diagnostics' | 'export' | 'jobs') => void
 }
-type Rectangle = { x: number; y: number; width: number; height: number }
+type Rectangle = { x: number; y: number; width: number; height: number; coordinateSpace?: 'pdf-points-bottom-left' }
 
 export function SourceWorkspace({
   navigation,
@@ -60,8 +52,7 @@ export function SourceWorkspace({
   workspace,
   activeNoteId,
   onSaved,
-  onError,
-  onUtilities
+  onError
 }: Props): ReactElement {
   const [sources, setSources] = useState<SourceDocument[]>([])
   const [source, setSource] = useState<SourceDocument | null>(null)
@@ -203,20 +194,10 @@ export function SourceWorkspace({
         sourceDocumentId: source.id,
         pdfPage: page,
         bounds,
+        printedPage: printedPage ? Number(printedPage) : undefined,
         imageDataUrl
       })
       if (captureContext.current === context) setRegion(null)
-      await onSaved()
-    } catch (error) {
-      onError(error)
-    }
-  }
-  const importAsset = async (kind: AssetKind) => {
-    if (!notebookId || !noteId) return
-    try {
-      const target = noteId
-      const asset = await window.researchNotebook.assets.import({ notebookId, kind })
-      if (asset) await window.researchNotebook.assets.attach({ noteId: target, assetId: asset.id, type: kind })
       await onSaved()
     } catch (error) {
       onError(error)
@@ -227,14 +208,11 @@ export function SourceWorkspace({
       <header className="source-header">
         <div>
           <span className="eyebrow">Source viewer</span>
-          <h2>{source?.title ?? 'Read and capture'}</h2>
+          <h2 dir="auto">{source?.title ?? 'Read and capture'}</h2>
         </div>
         <div className="source-header-actions">
-          <Button variant="ghost" size="icon" aria-label="Import PDF" onClick={() => void importPdf()}>
-            <Upload size={17} />
-          </Button>
           <Button variant="secondary" size="sm" disabled={!notebookId} onClick={() => void importPdf()}>
-            <FileText size={15} /> Import
+            <Upload size={15} /> Import PDF
           </Button>
         </div>
       </header>
@@ -255,29 +233,10 @@ export function SourceWorkspace({
             </option>
           ))}
         </select>
-        <div className="toolbar-grow" />
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Attach media" disabled={!noteId}>
-              <Upload size={16} />
-            </Button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className="menu-content" align="end">
-              {(['image', 'screenshot', 'audio', 'file'] as const).map((kind) => (
-                <DropdownMenu.Item className="menu-item" key={kind} onSelect={() => void importAsset(kind)}>
-                  Attach {kind}
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-        <Button variant="ghost" size="icon" aria-label="Source settings" onClick={() => onUtilities('settings')}>
-          <MoreHorizontal size={17} />
-        </Button>
       </div>
       <div className="source-toolbar" aria-label="Capture mode">
         <Button
+          size="sm"
           variant={interaction === 'text' ? 'primary' : 'secondary'}
           aria-pressed={interaction === 'text'}
           onClick={() => {
@@ -288,46 +247,15 @@ export function SourceWorkspace({
           Text
         </Button>
         <Button
+          size="sm"
           variant={interaction === 'region' ? 'primary' : 'secondary'}
           aria-pressed={interaction === 'region'}
           onClick={() => setInteraction('region')}
         >
           Region
         </Button>
-        <span role="status">Capture to: {destination?.title ?? 'Select a note to capture'}</span>
-      </div>
-      {url ? (
-        <PdfCanvas
-          key={source?.id}
-          initialText={
-            navigation?.sourceDocumentId === source?.id && navigation?.pdfPage === page
-              ? navigation?.extractedText
-              : null
-          }
-          interaction={interaction}
-          canCapture={Boolean(noteId)}
-          url={url}
-          page={page}
-          zoom={zoom}
-          onFitZoom={setFitZoom}
-          onPageCount={acceptCount}
-          onText={setSelection}
-          onRegion={setRegion}
-          onCaptureRegion={captureRegion}
-          region={region}
-        />
-      ) : (
-        <div className="source-empty">
-          <FileText size={30} />
-          <p>Import a PDF to read it beside your notes.</p>
-          <Button onClick={() => void importPdf()} disabled={!notebookId}>
-            Import PDF
-          </Button>
-        </div>
-      )}
-      {source && (
-        <footer className="capture-dock">
-          <div className="page-controls">
+        <div className="page-controls">
+          <div className="page-navigation">
             <Button
               variant="ghost"
               size="icon"
@@ -362,7 +290,8 @@ export function SourceWorkspace({
             >
               <ChevronRight size={17} />
             </Button>
-            <span className="separator" />
+          </div>
+          <div className="zoom-controls">
             <Button
               variant="ghost"
               size="icon"
@@ -381,6 +310,37 @@ export function SourceWorkspace({
               <Plus size={16} />
             </Button>
           </div>
+        </div>
+        <span role="status">Capture to: {destination?.title ?? 'Select a note to capture'}</span>
+      </div>
+      {url ? (
+        <PdfCanvas
+          key={source?.id}
+          initialText={
+            navigation?.sourceDocumentId === source?.id && navigation?.pdfPage === page
+              ? navigation?.extractedText
+              : null
+          }
+          interaction={interaction}
+          canCapture={Boolean(noteId)}
+          url={url}
+          page={page}
+          zoom={zoom}
+          onFitZoom={setFitZoom}
+          onPageCount={acceptCount}
+          onText={setSelection}
+          onRegion={setRegion}
+          onCaptureRegion={captureRegion}
+          region={region}
+        />
+      ) : (
+        <div className="source-empty">
+          <FileText size={30} />
+          <p>Import a PDF to read it beside your notes.</p>
+        </div>
+      )}
+      {source && (
+        <footer className="capture-dock">
           <div className="capture-actions">
             <label className="printed-page">
               Print p.{' '}
@@ -405,6 +365,7 @@ export function SourceWorkspace({
             </Button>
           </div>
           <textarea
+            dir="auto"
             aria-label="Selected PDF text"
             value={selection}
             onChange={(event) => setSelection(event.target.value)}
@@ -446,6 +407,9 @@ function PdfCanvas({
   const textContainer = useRef<HTMLDivElement>(null)
   const [textContent, setTextContent] = useState<Awaited<ReturnType<pdfjs.PDFPageProxy['getTextContent']>> | null>(null)
   const textCache = useRef(new Map<number, Promise<Awaited<ReturnType<pdfjs.PDFPageProxy['getTextContent']>>>>())
+  const drag = useRef<{ pointer: number; x: number; y: number } | null>(null)
+  const completedRegion = useRef<Rectangle | null>(null)
+  const viewportRef = useRef<ReturnType<pdfjs.PDFPageProxy['getViewport']> | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const wrapper = useRef<HTMLDivElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
@@ -516,7 +480,7 @@ function PdfCanvas({
       .then((content) => {
         if (!active) return
         setTextContent(content)
-        onText(initialText ?? content.items.map((item) => ('str' in item ? item.str : '')).join(' '))
+        if (initialText) onText(initialText)
       })
       .catch((reason) => {
         if (active) setError(String(reason))
@@ -534,6 +498,7 @@ function PdfCanvas({
       const safePage = Math.min(Math.max(page, 1), doc.numPages)
       const pdfPage = await doc.getPage(safePage)
       if (!active || !canvas.current) return
+      viewportRef.current = pdfPage.getViewport({ scale: effectiveZoom })
       const baseViewport = pdfPage.getViewport({ scale: 1 })
       if (active) setPageWidth(baseViewport.width)
       const deviceScale = Math.min(window.devicePixelRatio || 1, 2)
@@ -567,41 +532,79 @@ function PdfCanvas({
       textLayer?.cancel()
     }
   }, [doc, effectiveZoom, textContent, page])
-  const start = (event: PointerEvent<HTMLDivElement>) => {
-    if (interaction !== 'region' || !canCapture) return
+  const pointerPoint = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const x = Math.max(0, event.clientX - rect.left)
-    const y = Math.max(0, event.clientY - rect.top)
-    event.currentTarget.setPointerCapture(event.pointerId)
-    onRegion({ x, y, width: 0, height: 0 })
+    return {
+      x: Math.min(rect.width, Math.max(0, event.clientX - rect.left)),
+      y: Math.min(rect.height, Math.max(0, event.clientY - rect.top))
+    }
+  }
+  const start = (event: PointerEvent<HTMLDivElement>) => {
+    if (interaction !== 'region' || !canCapture || event.button !== 0) return
+    const point = pointerPoint(event)
+    drag.current = { pointer: event.pointerId, ...point }
+    completedRegion.current = null
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    onRegion({ ...point, width: 0, height: 0 })
   }
   const move = (event: PointerEvent<HTMLDivElement>) => {
-    if (interaction !== 'region' || !region) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    onRegion({
-      ...region,
-      width: Math.max(0, Math.min(rect.width - region.x, event.clientX - rect.left - region.x)),
-      height: Math.max(0, Math.min(rect.height - region.y, event.clientY - rect.top - region.y))
-    })
+    if (interaction !== 'region' || drag.current?.pointer !== event.pointerId) return
+    const rectangle = normalizedRectangle(drag.current, pointerPoint(event))
+    completedRegion.current = rectangle
+    onRegion(rectangle)
   }
-  const finish = () => {
+  const finish = (event: PointerEvent<HTMLDivElement>) => {
     if (interaction === 'text') {
       const selected = window.getSelection()
       if (selected?.anchorNode && wrapper.current?.contains(selected.anchorNode) && selected.toString().trim())
         onText(selected.toString())
       return
     }
-    if (!canCapture || !region || region.width < 8 || region.height < 8 || !canvas.current) return
+    if (drag.current?.pointer !== event.pointerId) return
+    const rectangle = normalizedRectangle(drag.current, pointerPoint(event))
+    drag.current = null
+    completedRegion.current = rectangle
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    onRegion(rectangle)
+  }
+  const cancel = () => {
+    drag.current = null
+    completedRegion.current = null
+    onRegion(null)
+  }
+  useEffect(() => {
+    drag.current = null
+    completedRegion.current = null
+    onRegion(null)
+  }, [page, interaction, effectiveZoom, onRegion])
+  const pdfBounds = (rectangle: Rectangle) => {
+    const viewport = viewportRef.current
+    if (!viewport) return null
+    const [x1, y1] = viewport.convertToPdfPoint(rectangle.x, rectangle.y)
+    const [x2, y2] = viewport.convertToPdfPoint(rectangle.x + rectangle.width, rectangle.y + rectangle.height)
+    return {
+      x: Math.min(x1, x2),
+      y: Math.min(y1, y2),
+      width: Math.abs(x2 - x1),
+      height: Math.abs(y2 - y1),
+      coordinateSpace: 'pdf-points-bottom-left' as const
+    }
+  }
+  const capture = () => {
+    const rectangle = completedRegion.current
+    if (!canCapture || !rectangle || rectangle.width < 8 || rectangle.height < 8 || !canvas.current) return
+    const bounds = pdfBounds(rectangle)
+    if (!bounds) return
     const scale = canvas.current.width / canvas.current.getBoundingClientRect().width
     const crop = document.createElement('canvas')
-    crop.width = Math.round(region.width * scale)
-    crop.height = Math.round(region.height * scale)
+    crop.width = Math.round(rectangle.width * scale)
+    crop.height = Math.round(rectangle.height * scale)
     const context = crop.getContext('2d')
     if (!context) return
     context.drawImage(
       canvas.current,
-      Math.round(region.x * scale),
-      Math.round(region.y * scale),
+      Math.round(rectangle.x * scale),
+      Math.round(rectangle.y * scale),
       crop.width,
       crop.height,
       0,
@@ -609,46 +612,67 @@ function PdfCanvas({
       crop.width,
       crop.height
     )
-    onCaptureRegion(crop.toDataURL('image/png'), {
-      x: Math.round(region.x * scale),
-      y: Math.round(region.y * scale),
-      width: crop.width,
-      height: crop.height
-    })
+    onCaptureRegion(crop.toDataURL('image/png'), bounds)
+  }
+  const extract = (limited: boolean) => {
+    const bounds = limited && completedRegion.current ? pdfBounds(completedRegion.current) : undefined
+    const items = textContent?.items.filter((item) => 'str' in item) ?? []
+    onText(reconstructText(items, bounds ?? undefined))
   }
   return (
-    <div className="pdf-scroll" ref={scroll}>
-      <div
-        className={`pdf-stage ${interaction}-selection`}
-        ref={wrapper}
-        onPointerDown={start}
-        onPointerMove={move}
-        onPointerUp={finish}
-        aria-label="PDF page. Drag to capture an image region."
-      >
-        <canvas ref={canvas} />
+    <>
+      <div className="pdf-scroll" ref={scroll}>
         <div
-          className="textLayer"
-          ref={textContainer}
-          style={{ pointerEvents: interaction === 'text' ? 'auto' : 'none' }}
-        />
-        {region && (
+          className={`pdf-stage ${interaction}-selection`}
+          ref={wrapper}
+          onPointerDown={start}
+          onPointerMove={move}
+          onPointerUp={finish}
+          onPointerCancel={cancel}
+          onLostPointerCapture={() => {
+            drag.current = null
+          }}
+          aria-label="PDF page. Drag to capture an image region."
+        >
+          <canvas ref={canvas} />
           <div
-            className="pdf-region"
-            style={{ left: region.x, top: region.y, width: region.width, height: region.height }}
+            className="textLayer"
+            ref={textContainer}
+            style={{ pointerEvents: interaction === 'text' ? 'auto' : 'none' }}
           />
-        )}
-        {loading && <div className="pdf-loading">Rendering PDF…</div>}
-        {error && <div className="pdf-loading">Unable to render PDF: {error}</div>}
+          {region && (
+            <div
+              className="pdf-region"
+              style={{ left: region.x, top: region.y, width: region.width, height: region.height }}
+            />
+          )}
+          {loading && <div className="pdf-loading">Rendering PDF…</div>}
+          {error && <div className="pdf-loading">Unable to render PDF: {error}</div>}
+        </div>
+        <p className="pdf-help">
+          <Maximize2 size={13} />{' '}
+          {interaction === 'region'
+            ? 'Drag on the page to capture a region.'
+            : textContent && !textContent.items.length
+              ? 'No selectable text. Use Region or type evidence manually. OCR is not available.'
+              : 'Select text on the page, or edit the extracted text below.'}
+        </p>
       </div>
-      <p className="pdf-help">
-        <Maximize2 size={13} />{' '}
-        {interaction === 'region'
-          ? 'Drag on the page to capture a region.'
-          : textContent && !textContent.items.length
-            ? 'No selectable text. Use Region or type evidence manually. OCR is not available.'
-            : 'Select text on the page, or edit the extracted text below.'}
-      </p>
-    </div>
+      <div className="extraction-actions">
+        <Button variant="secondary" size="sm" disabled={!textContent} onClick={() => extract(false)}>
+          Extract page text
+        </Button>
+        {interaction === 'region' && (
+          <>
+            <Button variant="secondary" size="sm" disabled={!region?.width} onClick={() => extract(true)}>
+              Extract region text
+            </Button>
+            <Button size="sm" disabled={!region?.width || !canCapture} onClick={capture}>
+              Capture region
+            </Button>
+          </>
+        )}
+      </div>
+    </>
   )
 }

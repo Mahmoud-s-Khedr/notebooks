@@ -54,3 +54,14 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
   configurable: true,
   value: vi.fn(() => 'data:image/png;base64,renderer-test-capture')
 })
+
+if (!window.PointerEvent) {
+  class TestPointerEvent extends MouseEvent {
+    pointerId: number
+    constructor(type: string, input: PointerEventInit = {}) {
+      super(type, input)
+      this.pointerId = input.pointerId ?? 0
+    }
+  }
+  Object.defineProperty(window, 'PointerEvent', { configurable: true, value: TestPointerEvent })
+}
