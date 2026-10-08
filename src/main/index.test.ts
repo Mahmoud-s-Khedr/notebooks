@@ -34,6 +34,10 @@ vi.mock('electron', () => ({
   app: {
     whenReady: state.ready,
     getPath: () => '/tmp/lifecycle-test',
+    getAppPath: () => '/tmp/app',
+    get isPackaged() {
+      return !state.dev
+    },
     getVersion: () => 'test',
     on: (event: string, handler: (...args: any[]) => any) => state.appEvents.set(event, handler),
     quit: state.quit,
@@ -146,6 +150,7 @@ describe('Electron startup and shutdown', () => {
   it('creates a secure window, starts jobs and installs trusted IPC', async () => {
     vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
     await start()
+    expect(state.options[0].icon).toBe('/tmp/app/resources/logo.png')
     expect(state.options[0].webPreferences).toMatchObject({
       contextIsolation: true,
       nodeIntegration: false,
@@ -175,6 +180,7 @@ describe('Electron startup and shutdown', () => {
     Object.defineProperty(process, 'resourcesPath', { configurable: true, value: '/tmp/resources' })
     await start()
     expect(state.loadFile).toHaveBeenCalledWith(expect.stringContaining('renderer/index.html'))
+    expect(state.options[0].icon).toBe('/tmp/resources/resources/logo.png')
     state.webEvents.get('did-fail-load')!({}, -3, 'aborted', 'url', true)
     expect(state.record).not.toHaveBeenCalled()
     state.webEvents.get('did-fail-load')!({}, -2, 'offline', 'url', true)
