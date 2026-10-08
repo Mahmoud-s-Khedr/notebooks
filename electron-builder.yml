@@ -6,6 +6,8 @@ files:
   - out/**/*
   - package.json
 extraResources:
+  - from: resources/logo.png
+    to: resources/logo.png
   - from: resources/whisper.cpp
     to: whisper.cpp
     filter:
@@ -17,6 +19,7 @@ electronVersion: 44.0.0
 npmRebuild: true
 artifactName: Research-Notebook-${version}-${os}-${arch}.${ext}
 linux:
+  icon: resources/logo.png
   category: Office
   maintainer: Research Notebook Maintainers <maintainers@researchnotebook.app>
   target:
@@ -27,6 +30,7 @@ linux:
     - target: rpm
       arch: [x64]
 win:
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch: [x64]

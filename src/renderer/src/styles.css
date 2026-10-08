@@ -260,9 +260,18 @@ kbd {
 .product-name {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 6px 23px;
-  font-weight: 750;
+  justify-content: center;
+  margin: 0 6px 16px;
+}
+.product-logo,
+.welcome-logo {
+  display: block;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 12px;
+}
+.welcome-logo {
+  margin: 0 auto;
 }
 .sidebar-search {
   display: flex;

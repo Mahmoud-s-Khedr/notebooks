@@ -30,6 +30,7 @@ import { bytes } from './format-bytes'
 import { SaveContext, SaveCoordinator, useSaves } from './save-coordinator'
 import { AudioRecorder, PageWorkspace as EditorWorkspace } from './features/editor/PageWorkspace'
 import { SourceWorkspace } from './features/sources/SourceWorkspace'
+import appLogo from '../../../resources/logo.png'
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'The requested change could not be saved.'
@@ -574,8 +575,7 @@ function NotebookSidebar({
   return (
     <aside className="sidebar" aria-label="Notebooks">
       <div className="product-name">
-        <BookOpen size={20} />
-        Research Notebook
+        <img className="product-logo" src={appLogo} alt="Research Notebook" width={132} height={132} />
       </div>
       <div className="sidebar-search">
         <Search size={16} />
@@ -1594,7 +1594,7 @@ function TrashDialog({
 function Empty({ onNewNotebook }: { onNewNotebook: () => Promise<void> }): ReactElement {
   return (
     <div className="empty-state app-empty">
-      <BookOpen size={34} />
+      <img className="welcome-logo" src={appLogo} alt="Research Notebook" width={160} height={160} />
       <h1>Your structured research workspace</h1>
       <p>Create a notebook, then add pages, notes, and blocks.</p>
       <Button onClick={() => void onNewNotebook()}>Create notebook</Button>
