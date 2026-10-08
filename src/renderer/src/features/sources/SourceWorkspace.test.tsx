@@ -125,8 +125,7 @@ describe('SourceWorkspace core source-capture workflow', () => {
     expect(onSaved).toHaveBeenCalled()
   })
 
-  it('offers contextual actions for selected PDF text and captures the selected quote', async () => {
-    const user = userEvent.setup()
+  it('does not offer contextual actions when selected PDF text is released', async () => {
     const document = source()
     api.sources.list.mockResolvedValue([document])
     api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
@@ -147,6 +146,32 @@ describe('SourceWorkspace core source-capture workflow', () => {
       getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 10, bottom: 20, width: 40 }) })
     } as unknown as Selection)
     fireEvent.pointerUp(stage, { clientX: 30, clientY: 20, pointerId: 1 })
+
+    expect(screen.queryByRole('toolbar', { name: 'Selected text actions' })).not.toBeInTheDocument()
+  })
+
+  it('offers contextual actions only after right-clicking selected PDF text and captures the selected quote', async () => {
+    const user = userEvent.setup()
+    const document = source()
+    api.sources.list.mockResolvedValue([document])
+    api.assets.dataUrl.mockResolvedValue('data:application/pdf;base64,fixture')
+    render(
+      <SourceWorkspace
+        notebookId="notebook-1"
+        workspace={workspace({ notes: [{ ...note(), blocks: [] }] })}
+        activeNoteId="note-1"
+        {...callbacks()}
+      />
+    )
+
+    const stage = await screen.findByLabelText('PDF page. Drag to capture an image region.')
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      anchorNode: stage,
+      rangeCount: 1,
+      toString: () => 'A selected quote',
+      getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 10, bottom: 20, width: 40 }) })
+    } as unknown as Selection)
+    fireEvent.contextMenu(stage, { clientX: 30, clientY: 20 })
 
     expect(await screen.findByRole('toolbar', { name: 'Selected text actions' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Capture quote' }))
@@ -176,6 +201,13 @@ describe('SourceWorkspace core source-capture workflow', () => {
     fireEvent.contextMenu(stage, { clientX: 30, clientY: 20 })
 
     expect(await screen.findByRole('toolbar', { name: 'Selected text actions' })).toBeVisible()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('toolbar', { name: 'Selected text actions' })).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(stage, { clientX: 30, clientY: 20 })
+    expect(await screen.findByRole('toolbar', { name: 'Selected text actions' })).toBeVisible()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('toolbar', { name: 'Selected text actions' })).not.toBeInTheDocument()
   })
 
   it.each([

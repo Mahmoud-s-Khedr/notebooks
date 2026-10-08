@@ -466,6 +466,7 @@ function PdfCanvas({
   const canvas = useRef<HTMLCanvasElement>(null)
   const wrapper = useRef<HTMLDivElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
+  const textActionsMenu = useRef<HTMLDivElement>(null)
   const [doc, setDoc] = useState<pdfjs.PDFDocumentProxy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -609,10 +610,7 @@ function PdfCanvas({
     onRegion(rectangle)
   }
   const finish = (event: PointerEvent<HTMLDivElement>) => {
-    if (interaction === 'text') {
-      showTextActions()
-      return
-    }
+    if (interaction === 'text') return
     if (drag.current?.pointer !== event.pointerId) return
     const rectangle = normalizedRectangle(drag.current, pointerPoint(event))
     drag.current = null
@@ -631,6 +629,21 @@ function PdfCanvas({
     setTextActions(null)
     onRegion(null)
   }, [page, interaction, effectiveZoom, onRegion])
+  useEffect(() => {
+    if (!textActions) return
+    const dismissOnOutsidePress = (event: globalThis.PointerEvent) => {
+      if (!textActionsMenu.current?.contains(event.target as Node)) setTextActions(null)
+    }
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setTextActions(null)
+    }
+    window.addEventListener('pointerdown', dismissOnOutsidePress, true)
+    window.addEventListener('keydown', dismissOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', dismissOnOutsidePress, true)
+      window.removeEventListener('keydown', dismissOnEscape)
+    }
+  }, [textActions])
   const showTextActions = (point?: { x: number; y: number }) => {
     const selected = window.getSelection()
     const stage = wrapper.current
@@ -658,10 +671,6 @@ function PdfCanvas({
     if (interaction !== 'text') return
     const bounds = event.currentTarget.getBoundingClientRect()
     if (showTextActions({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })) event.preventDefault()
-  }
-  const keyboardMenu = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (interaction !== 'text' || (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))) return
-    if (showTextActions()) event.preventDefault()
   }
   const pdfBounds = (rectangle: Rectangle) => {
     const viewport = viewportRef.current
@@ -716,7 +725,6 @@ function PdfCanvas({
           onPointerUp={finish}
           onPointerCancel={cancel}
           onContextMenu={contextMenu}
-          onKeyDown={keyboardMenu}
           onLostPointerCapture={() => {
             drag.current = null
           }}
@@ -738,6 +746,7 @@ function PdfCanvas({
           {textActions && interaction === 'text' && (
             <div
               className="pdf-selection-actions"
+              ref={textActionsMenu}
               role="toolbar"
               aria-label="Selected text actions"
               style={{ left: textActions.x, top: textActions.y }}
@@ -774,7 +783,7 @@ function PdfCanvas({
             ? 'Drag on the page to capture a region.'
             : textContent && !textContent.items.length
               ? 'No selectable text. Use Region or type evidence manually. OCR is not available.'
-              : 'Select text to reveal capture actions. Right-click opens the same choices.'}
+              : 'Select text, then right-click to reveal capture actions.'}
         </p>
       </div>
       {interaction === 'region' && (
