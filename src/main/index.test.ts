@@ -19,6 +19,10 @@ const state = vi.hoisted(() => ({
   reload: vi.fn(),
   loadURL: vi.fn(),
   loadFile: vi.fn(),
+  openDevTools: vi.fn(),
+  getApplicationMenu: vi.fn(),
+  buildFromTemplate: vi.fn(),
+  setApplicationMenu: vi.fn(),
   popup: vi.fn(),
   destroyed: vi.fn(),
   dbClose: vi.fn(),
@@ -50,6 +54,11 @@ vi.mock('electron', () => ({
     relaunch: state.relaunch
   },
   dialog: { showMessageBox: state.message },
+  Menu: {
+    getApplicationMenu: state.getApplicationMenu,
+    buildFromTemplate: state.buildFromTemplate,
+    setApplicationMenu: state.setApplicationMenu
+  },
   safeStorage: {
     isEncryptionAvailable: () => true,
     getSelectedStorageBackend: () => 'gnome_libsecret',
@@ -66,6 +75,7 @@ vi.mock('electron', () => ({
       const webContents = {
         mainFrame: {},
         send: state.send,
+        openDevTools: state.openDevTools,
         setWindowOpenHandler: state.popup,
         on: (event: string, handler: (...args: any[]) => any) => state.webEvents.set(event, handler)
       }
@@ -122,6 +132,8 @@ beforeEach(async () => {
   state.options.length = 0
   state.dev = true
   state.getName.mockReturnValue('Research Notebook')
+  state.getApplicationMenu.mockReturnValue(null)
+  state.buildFromTemplate.mockImplementation((template) => ({ items: template }))
   state.ready.mockResolvedValue(undefined)
   state.bootstrap.mockReturnValue({ activeRoot: '/tmp/active' })
   state.database.mockImplementation(() => undefined)
@@ -162,8 +174,10 @@ describe('Electron startup and shutdown', () => {
     expect(state.options[0].webPreferences).toMatchObject({
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      devTools: true
     })
+    expect(state.openDevTools).toHaveBeenCalledWith({ mode: 'detach' })
     expect(state.loadURL).toHaveBeenCalledWith('http://localhost:5173')
     expect(state.resume).toHaveBeenCalledOnce()
     expect(state.register.mock.calls[0][2](event())).toBe(true)
@@ -210,6 +224,43 @@ describe('Electron startup and shutdown', () => {
     Object.defineProperty(process, 'resourcesPath', { configurable: true, value: '/tmp/resources' })
     await start()
     expect(state.setPath).toHaveBeenCalledWith('userData', '/tmp/lifecycle-test/research-notebook-production')
+    expect(state.options[0].webPreferences.devTools).toBe(false)
+    expect(state.openDevTools).not.toHaveBeenCalled()
+  })
+  it('opens developer tools in packaged nightly builds without using the development server', async () => {
+    state.dev = false
+    state.getName.mockReturnValue('Research Notebook Nightly')
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
+    vi.stubGlobal('__dirname', '/tmp/main')
+    await start()
+    expect(state.options[0].webPreferences.devTools).toBe(true)
+    expect(state.openDevTools).toHaveBeenCalledWith({ mode: 'detach' })
+    expect(state.loadFile).toHaveBeenCalledWith(expect.stringContaining('renderer/index.html'))
+    expect(state.loadURL).not.toHaveBeenCalled()
+    expect(state.getApplicationMenu).not.toHaveBeenCalled()
+  })
+  it('removes only developer tools menu entries in production, even with DEBUG set', async () => {
+    state.dev = false
+    state.getName.mockReturnValue('Research Notebook Production')
+    vi.stubEnv('DEBUG', '1')
+    vi.stubGlobal('__dirname', '/tmp/main')
+    const toggle = { role: 'toggleDevTools' }
+    const zoom = { role: 'zoomIn' }
+    const submenu = { items: [toggle, zoom] }
+    const menu = { items: [{ submenu }, { role: 'quit' }] }
+    state.getApplicationMenu.mockReturnValue(menu)
+    await start()
+    expect(state.buildFromTemplate).toHaveBeenCalledExactlyOnceWith([
+      {
+        accelerator: undefined,
+        click: expect.any(Function),
+        submenu: [{ role: 'zoomIn', accelerator: undefined, click: expect.any(Function), submenu: undefined }]
+      },
+      { role: 'quit', accelerator: undefined, click: expect.any(Function), submenu: undefined }
+    ])
+    expect(state.setApplicationMenu).toHaveBeenCalledWith(state.buildFromTemplate.mock.results[0].value)
+    expect(state.options[0].webPreferences.devTools).toBe(false)
+    expect(state.openDevTools).not.toHaveBeenCalled()
   })
   it('replays a pending close for readiness and ignores invalid acknowledgements', async () => {
     await start()

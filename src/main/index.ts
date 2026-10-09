@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { is } from '@electron-toolkit/utils'
@@ -8,6 +9,9 @@ import { registerNotebookIpc } from './ipc/register-notebook-ipc'
 import { NotebookService } from './services/notebook-service'
 import { ErrorLogService, appendFallbackError } from './services/error-log-service'
 import { resolveLibraryBootstrap } from './library-bootstrap'
+
+// Packaged nightly builds need the same inspection tools as local development.
+const developerToolsEnabled = !app.isPackaged || app.getName() === 'Research Notebook Nightly'
 
 // Set the production profile before Chromium or library bootstrap reads it.
 // Nightly and development keep their existing libraries untouched.
@@ -93,6 +97,17 @@ async function recoverClose(): Promise<void> {
   }
 }
 
+function productionMenuTemplate(menu: Menu): MenuItemConstructorOptions[] {
+  return menu.items
+    .filter((item) => item.role?.toLowerCase() !== 'toggledevtools')
+    .map((item): MenuItemConstructorOptions => ({
+      ...item,
+      accelerator: item.accelerator ?? undefined,
+      click: (menuItem, window, event) => item.click(menuItem, window, event),
+      submenu: item.submenu ? productionMenuTemplate(item.submenu) : undefined
+    }))
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -104,9 +119,17 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      devTools: developerToolsEnabled
     }
   })
+
+  if (!developerToolsEnabled) {
+    const menu = Menu.getApplicationMenu()
+    if (menu) {
+      Menu.setApplicationMenu(Menu.buildFromTemplate(productionMenuTemplate(menu)))
+    }
+  }
 
   closeApproved = false
   mainWindow.on('close', (event) => {
@@ -141,6 +164,7 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  if (developerToolsEnabled) mainWindow.webContents.openDevTools({ mode: 'detach' })
 }
 
 app
