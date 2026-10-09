@@ -47,6 +47,10 @@ jobs:
 
   package-linux:
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [dev, prod]
     runs-on: ubuntu-latest
     env:
       WHISPER_SIDECAR_PLATFORM: linux
@@ -107,8 +111,8 @@ jobs:
             done
             printf '\n}\n'
           } > resources/whisper.cpp/checksums.json
-      - name: Set rolling nightly package version
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Set development package version
+        if: matrix.channel == 'dev'
         run: npm version "$(node -p "require('./package.json').version")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - run: npm run package:linux
       - run: |
@@ -134,24 +138,28 @@ jobs:
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: research-notebook-linux-appimage
+          name: linux-${{ matrix.channel }}-appimage
           path: release/*.AppImage
           if-no-files-found: error
       - name: Upload Linux Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: research-notebook-linux-deb
+          name: linux-${{ matrix.channel }}-deb
           path: release/*.deb
           if-no-files-found: error
       - name: Upload Linux RPM package
         uses: actions/upload-artifact@v4
         with:
-          name: research-notebook-linux-rpm
+          name: linux-${{ matrix.channel }}-rpm
           path: release/*.rpm
           if-no-files-found: error
 
   package-windows:
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [dev, prod]
     runs-on: windows-latest
     env:
       WHISPER_SIDECAR_PLATFORM: win32
@@ -192,8 +200,8 @@ jobs:
             $hashes["win32/$($_.Name)"] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
           }
           $hashes | ConvertTo-Json | Set-Content resources/whisper.cpp/checksums.json
-      - name: Set rolling nightly package version
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Set development package version
+        if: matrix.channel == 'dev'
         shell: bash
         run: npm version "$(node -p "require('./package.json').version")-nightly.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - run: npm run package:win
@@ -210,12 +218,12 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: research-notebook-windows-installer
+          name: windows-${{ matrix.channel }}-installer
           path: release/*-Setup-*.exe
           if-no-files-found: error
       - name: Upload Windows portable package
         uses: actions/upload-artifact@v4
         with:
-          name: research-notebook-windows-portable
+          name: windows-${{ matrix.channel }}-portable
           path: release/*-Portable-*.exe
           if-no-files-found: error

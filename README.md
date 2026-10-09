@@ -57,7 +57,7 @@ Notebook, page, note, and block deletion is recoverable: a deletion operation mo
 
 ## Production and nightly desktop packages
 
-`npm run package:linux` builds **Research Notebook Production** from a stable version and creates x64 AppImage, DEB, and RPM packages. `npm run package:win` creates x64 NSIS and portable EXE packages on Windows. GitHub Actions validates pull requests and branch pushes, and successful `main` pushes replace the five stable assets on the rolling `nightly` prerelease.
+`npm run package:linux` builds **Research Notebook Production** from a stable version and creates x64 AppImage, DEB, and RPM packages. `npm run package:win` creates x64 NSIS and portable EXE packages on Windows. GitHub Actions validates every pull request and branch push, then builds both development and production packages for Linux and Windows. Download them from the workflow run’s **Artifacts** section: `linux-dev-appimage`, `linux-dev-deb`, `linux-dev-rpm`, `windows-dev-installer`, `windows-dev-portable`, and the corresponding `prod` artifacts. Development artifacts use the nightly version and application identity; production artifacts use the stable version. CI uploads these packages as Actions artifacts; it does not publish them to GitHub Releases.
 
 Production uses the `research-notebook-production` package, executable, desktop identity, and data directory. Nightly versions (`0.1.0-nightly.N`) retain the legacy `research-notebook` package identity and show as **Research Notebook Nightly**. Both channels use the notebook logo and can be installed alongside one another, including older nightly installations. Production starts with a separate library; use the app's backup and restore tools if you want to transfer existing notes.
 
