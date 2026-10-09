@@ -9,6 +9,9 @@ const state = vi.hoisted(() => ({
   windows: [] as any[],
   options: [] as any[],
   ready: vi.fn(),
+  getName: vi.fn(),
+  setPath: vi.fn(),
+  setAppUserModelId: vi.fn(),
   quit: vi.fn(),
   relaunch: vi.fn(),
   message: vi.fn(),
@@ -35,6 +38,9 @@ vi.mock('electron', () => ({
     whenReady: state.ready,
     getPath: () => '/tmp/lifecycle-test',
     getAppPath: () => '/tmp/app',
+    getName: state.getName,
+    setPath: state.setPath,
+    setAppUserModelId: state.setAppUserModelId,
     get isPackaged() {
       return !state.dev
     },
@@ -115,6 +121,7 @@ beforeEach(async () => {
   state.windows.length = 0
   state.options.length = 0
   state.dev = true
+  state.getName.mockReturnValue('Research Notebook')
   state.ready.mockResolvedValue(undefined)
   state.bootstrap.mockReturnValue({ activeRoot: '/tmp/active' })
   state.database.mockImplementation(() => undefined)
@@ -150,6 +157,7 @@ describe('Electron startup and shutdown', () => {
   it('creates a secure window, starts jobs and installs trusted IPC', async () => {
     vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
     await start()
+    expect(state.setPath).not.toHaveBeenCalled()
     expect(state.options[0].icon).toBe('/tmp/app/resources/logo.png')
     expect(state.options[0].webPreferences).toMatchObject({
       contextIsolation: true,
@@ -179,6 +187,7 @@ describe('Electron startup and shutdown', () => {
     vi.stubGlobal('__dirname', '/tmp/main')
     Object.defineProperty(process, 'resourcesPath', { configurable: true, value: '/tmp/resources' })
     await start()
+    expect(state.setPath).toHaveBeenCalledWith('userData', '/tmp/lifecycle-test/research-notebook')
     expect(state.loadFile).toHaveBeenCalledWith(expect.stringContaining('renderer/index.html'))
     expect(state.options[0].icon).toBe('/tmp/resources/resources/logo.png')
     state.webEvents.get('did-fail-load')!({}, -3, 'aborted', 'url', true)
@@ -193,6 +202,14 @@ describe('Electron startup and shutdown', () => {
       expect.any(Error),
       expect.objectContaining({ category: 'renderer.process-gone' })
     )
+  })
+  it('uses a separate library profile for packaged production builds', async () => {
+    state.dev = false
+    state.getName.mockReturnValue('Research Notebook Production')
+    vi.stubGlobal('__dirname', '/tmp/main')
+    Object.defineProperty(process, 'resourcesPath', { configurable: true, value: '/tmp/resources' })
+    await start()
+    expect(state.setPath).toHaveBeenCalledWith('userData', '/tmp/lifecycle-test/research-notebook-production')
   })
   it('replays a pending close for readiness and ignores invalid acknowledgements', async () => {
     await start()
