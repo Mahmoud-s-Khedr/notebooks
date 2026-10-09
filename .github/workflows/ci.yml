@@ -115,8 +115,12 @@ jobs:
           test -f release/*.AppImage
           test -f release/*.deb
           test -f release/*.rpm
-          test "$(dpkg-deb -f release/*.deb Package)" = "research-notebook"
-          rpm -qip release/*.rpm | grep -q '^Name *: research-notebook$'
+          expected="research-notebook-production"
+          case "$(node -p "require('./package.json').version")" in
+            *-nightly.*) expected="research-notebook" ;;
+          esac
+          test "$(dpkg-deb -f release/*.deb Package)" = "$expected"
+          test "$(rpm -qp --queryformat '%{NAME}' release/*.rpm)" = "$expected"
       - name: Smoke test the Whisper sidecar in the Debian package
         run: |
           package="$(find release -maxdepth 1 -name '*.deb' -print -quit)"
@@ -198,8 +202,10 @@ jobs:
           if (-not (Get-ChildItem release -Filter *.exe)) { throw 'Windows packages were not created.' }
           $packages = Get-ChildItem release -Filter *.exe
           if ($packages.Count -lt 2) { throw 'Expected NSIS and portable executables.' }
+          $expected = 'Research Notebook Production'
+          if ((node -p "require('./package.json').version") -like '*-nightly.*') { $expected = 'Research Notebook Nightly' }
           foreach ($package in $packages) {
-            if ($package.VersionInfo.ProductName -ne 'Research Notebook') { throw "Unexpected package metadata in $($package.Name)." }
+            if ($package.VersionInfo.ProductName -ne $expected) { throw "Unexpected package metadata in $($package.Name)." }
           }
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4

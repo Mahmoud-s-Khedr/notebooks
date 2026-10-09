@@ -19,7 +19,7 @@ electronVersion: 44.0.0
 npmRebuild: true
 artifactName: Research-Notebook-${version}-${os}-${arch}.${ext}
 linux:
-  icon: resources/logo.png
+  icon: resources/icons
   category: Office
   maintainer: Research Notebook Maintainers <maintainers@researchnotebook.app>
   target:

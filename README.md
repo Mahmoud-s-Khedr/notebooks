@@ -55,13 +55,17 @@ The database lives in Electron's per-user application-data directory as `databas
 
 Notebook, page, note, and block deletion is recoverable: a deletion operation moves the active descendants together into Trash. Restoring that operation leaves items deleted in an earlier, independent operation untouched. Emptying Trash and permanent deletion are explicit actions. Physical asset cleanup remains deferred until the asset milestone, and backups/lossless export should precede any destructive asset UI.
 
-## Nightly desktop packages
+## Production and nightly desktop packages
 
-`npm run package:linux` creates x64 AppImage, DEB, and RPM packages. `npm run package:win` creates x64 NSIS and portable EXE packages on Windows. GitHub Actions validates pull requests and branch pushes, and successful `main` pushes replace the five stable assets on the rolling `nightly` prerelease.
+`npm run package:linux` builds **Research Notebook Production** from a stable version and creates x64 AppImage, DEB, and RPM packages. `npm run package:win` creates x64 NSIS and portable EXE packages on Windows. GitHub Actions validates pull requests and branch pushes, and successful `main` pushes replace the five stable assets on the rolling `nightly` prerelease.
+
+Production uses the `research-notebook-production` package, executable, desktop identity, and data directory. Nightly versions (`0.1.0-nightly.N`) retain the legacy `research-notebook` package identity and show as **Research Notebook Nightly**. Both channels use the notebook logo and can be installed alongside one another, including older nightly installations. Production starts with a separate library; use the app's backup and restore tools if you want to transfer existing notes.
 
 The initial desktop packages are unsigned. Linux and Windows will show platform trust warnings; signing and auto-update are intentionally deferred to a secrets-managed release-hardening milestone.
 
 ### Assets
+
+The application icon source is `resources/logo.png`; Linux packages use the standard PNG sizes in `resources/icons/`, and Windows packages use `resources/icon.ico`. Regenerate those icon assets from the logo when updating the branding.
 
 Assets should live beside the database, under managed `assets/images`, `assets/screenshots`, `assets/audio`, and `assets/files` directories. The database must store application-relative paths, MIME type, byte size, source filename, checksum when practical, and metadata—not blobs or absolute paths. Writes should use a temporary file plus atomic rename; deletion should be deferred until no block/export references remain.
 

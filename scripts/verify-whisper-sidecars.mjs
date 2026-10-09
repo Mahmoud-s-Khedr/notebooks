@@ -12,7 +12,7 @@ const allSidecars = [
   ['linux', 'whisper-cli'],
   ['win32', 'whisper-cli.exe']
 ]
-const requestedPlatform = process.env.WHISPER_SIDECAR_PLATFORM
+const requestedPlatform = process.argv[2] ?? process.env.WHISPER_SIDECAR_PLATFORM
 if (requestedPlatform && !['linux', 'win32'].includes(requestedPlatform))
   throw new Error(`Unsupported Whisper sidecar platform: ${requestedPlatform}`)
 const sidecars = requestedPlatform ? allSidecars.filter(([platform]) => platform === requestedPlatform) : allSidecars

@@ -9,6 +9,21 @@ import { NotebookService } from './services/notebook-service'
 import { ErrorLogService, appendFallbackError } from './services/error-log-service'
 import { resolveLibraryBootstrap } from './library-bootstrap'
 
+// Set the production profile before Chromium or library bootstrap reads it.
+// Nightly and development keep their existing libraries untouched.
+if (app.isPackaged) {
+  const profile =
+    app.getName() === 'Research Notebook Production' ? 'research-notebook-production' : 'research-notebook'
+  app.setPath('userData', join(app.getPath('appData'), profile))
+}
+if (process.platform === 'win32' && app.isPackaged) {
+  app.setAppUserModelId(
+    app.getName() === 'Research Notebook Production'
+      ? 'com.researchnotebook.app.production'
+      : 'com.researchnotebook.app'
+  )
+}
+
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let recoveringClose = false
 let closeRequest: string | null = null
